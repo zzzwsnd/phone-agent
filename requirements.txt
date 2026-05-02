@@ -1,0 +1,10 @@
+livekit>=1.0
+livekit-agents[openai,deepgram,cartesia,silero,turn_detector]~=1.0
+livekit-plugins-noise-cancellation~=0.2
+python-dotenv~=1.0
+langchain-openai~=0.3
+langchain-core~=0.3
+langgraph~=0.4
+fastapi~=0.115
+uvicorn~=0.34
+pydantic~=2.0

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(where python:*)",
+      "Bash(/c/Users/lenovo/AppData/Local/Microsoft/WindowsApps/python.exe:*)",
+      "Bash(py --version)",
+      "Bash(py -3 --version)",
+      "Bash(py:*)"
+    ]
+  }
+}
