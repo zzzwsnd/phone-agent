@@ -2,11 +2,10 @@
 语音工具集 — LiveKit 通话控制操作
 
 这些是 LiveKit Agent 的 function_tool，由 AI 在对话中直接调用
-控制 SIP 拨号、挂断、转接等通话操作
+控制挂断、转接、访客记录保存等操作
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -17,7 +16,7 @@ from livekit.agents import (
     get_job_context,
 )
 
-logger = logging.getLogger("outbound-caller.voice_tools")
+logger = logging.getLogger("park-visitor.voice_tools")
 
 
 async def hangup():
@@ -28,24 +27,78 @@ async def hangup():
     )
 
 
-def create_voice_tools(dial_info: dict[str, Any], participant: rtc.RemoteParticipant | None):
+def create_voice_tools(visitor_context: dict[str, Any], participant: rtc.RemoteParticipant | None):
     """创建绑定到当前通话上下文的语音工具函数。
 
-    因为 LiveKit 的 function_tool 需要绑定到 Agent 实例，
-    这里返回一个工具列表，供 OutboundCaller 使用。
+    Args:
+        visitor_context: 访客上下文，含 caller_number, transfer_to, call_room_name
+        participant: 来电方的 RemoteParticipant
     """
 
     @function_tool()
-    async def transfer_call(ctx: RunContext):
-        """将通话转接给人工坐席，需在用户确认后调用。"""
-        transfer_to = dial_info.get("transfer_to")
-        if not transfer_to:
-            return "无法转接：未配置转接号码"
+    async def save_visitor_record(
+        ctx: RunContext,
+        caller_number: str,
+        license_plate: str,
+        visiting_company: str,
+        visitor_phone: str,
+        purpose: str,
+        visitor_name: str,
+    ):
+        """访客信息采集完毕后调用，保存访客登记记录。
 
-        logger.info(f"转接通话至 {transfer_to}")
+        Args:
+            caller_number: 呼入主叫号码
+            license_plate: 车牌号
+            visiting_company: 来访单位
+            visitor_phone: 访客联系电话
+            purpose: 来访事由
+            visitor_name: 访客姓名
+        """
+        from infra.visitor_db import save_visitor_record as db_save
+        from infra.wechat_push import push_visitor_to_security
+
+        logger.info(f"保存访客记录: caller={caller_number}, plate={license_plate}, company={visiting_company}")
+
+        try:
+            record_id = db_save(
+                caller_number=caller_number,
+                license_plate=license_plate or None,
+                visiting_company=visiting_company or None,
+                visitor_phone=visitor_phone or None,
+                purpose=purpose or None,
+                visitor_name=visitor_name or None,
+                call_room_name=visitor_context.get("call_room_name", ""),
+            )
+            logger.info(f"访客记录已保存, id={record_id}")
+
+            # 推送微信通知（占位）
+            record = {
+                "caller_number": caller_number,
+                "license_plate": license_plate,
+                "visiting_company": visiting_company,
+                "visitor_phone": visitor_phone,
+                "purpose": purpose,
+                "visitor_name": visitor_name,
+            }
+            await push_visitor_to_security(record)
+
+            return f"访客记录已保存（ID: {record_id}），已通知门卫"
+        except Exception as e:
+            logger.error(f"保存访客记录失败: {e}")
+            return f"保存失败: {e}"
+
+    @function_tool()
+    async def transfer_call(ctx: RunContext):
+        """访客要求找人工/保安时调用，转接通话。"""
+        transfer_to = visitor_context.get("transfer_to")
+        if not transfer_to:
+            return "无法转接：未配置保安转接号码"
+
+        logger.info(f"转接通话至保安: {transfer_to}")
 
         await ctx.session.generate_reply(
-            instructions="告知用户即将转接给人工坐席，请稍候"
+            instructions="告知访客即将转接给保安，请稍候"
         )
 
         job_ctx = get_job_context()
@@ -67,39 +120,11 @@ def create_voice_tools(dial_info: dict[str, Any], participant: rtc.RemotePartici
 
     @function_tool()
     async def end_call(ctx: RunContext):
-        """用户希望结束通话时调用。"""
-        logger.info(f"结束通话")
+        """访客信息已保存或通话结束时调用。"""
+        logger.info("结束通话")
         current_speech = ctx.session.current_speech
         if current_speech:
             await current_speech.wait_for_playout()
         await hangup()
 
-    @function_tool()
-    async def look_up_availability(ctx: RunContext, date: str):
-        """用户询问其他预约时间时调用，查询指定日期的可用时段。
-
-        Args:
-            date: 要查询可用时间的日期
-        """
-        logger.info(f"查询可用时段: {date}")
-        await asyncio.sleep(2)
-        return {"available_times": ["上午 9:00", "上午 10:30", "下午 2:00", "下午 3:30"]}
-
-    @function_tool()
-    async def confirm_appointment(ctx: RunContext, date: str, time: str):
-        """用户确认预约时调用，仅在用户确定日期和时间后使用。
-
-        Args:
-            date: 预约日期
-            time: 预约时间
-        """
-        logger.info(f"确认预约: {date} {time}")
-        return "预约已确认"
-
-    @function_tool()
-    async def detected_answering_machine(ctx: RunContext):
-        """检测到语音信箱后调用，在听到语音信箱问候语后使用。"""
-        logger.info("检测到语音信箱，挂断")
-        await hangup()
-
-    return [transfer_call, end_call, look_up_availability, confirm_appointment, detected_answering_machine]
+    return [save_visitor_record, transfer_call, end_call]

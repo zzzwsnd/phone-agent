@@ -6,7 +6,12 @@
       "Bash(/c/Users/lenovo/AppData/Local/Microsoft/WindowsApps/python.exe:*)",
       "Bash(py --version)",
       "Bash(py -3 --version)",
-      "Bash(py:*)"
+      "Bash(py:*)",
+      "Bash(pip show:*)",
+      "Bash(pip list:*)",
+      "WebSearch",
+      "Bash(uv sync:*)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

@@ -1,7 +1,7 @@
 """
-通话状态定义 — LangGraph 图的状态结构
+通话状态定义 — 访客呼入登记的状态结构
 
-每次通话对应一个图实例，状态在整个对话生命周期中流转
+每次通话对应一个状态实例，在对话生命周期中流转
 """
 from __future__ import annotations
 
@@ -10,27 +10,33 @@ from typing import Annotated, Optional, TypedDict
 
 
 class CallState(TypedDict, total=False):
-    """外呼通话的完整状态"""
+    """访客呼入登记的完整状态"""
 
-    # ── 输入字段（调度时传入） ──────────────────────────────────────────────
-    phone_number: str                    # 被叫号码
-    transfer_to: str                     # 转接目标号码
-    customer_name: str                   # 客户姓名
-    appointment_time: str                # 预约时间
+    # ── 呼入标识 ──────────────────────────────────────────────────────────────
+    caller_number: str                    # 呼入主叫号码（从 SIP participant attributes 提取）
 
-    # ── 通话控制字段 ──────────────────────────────────────────────────────
-    call_status: str                     # dialing / ringing / connected / voicemail / ended / transferred
-    next_action: str                     # 图节点路由: greet / chat / lookup / confirm / transfer / end / done
+    # ── 访客登记字段 ──────────────────────────────────────────────────────────
+    license_plate: Optional[str]          # 车牌号，如"沪A12345"
+    visiting_company: Optional[str]       # 来访单位
+    visitor_phone: Optional[str]          # 访客联系电话
+    purpose: Optional[str]                # 来访事由（送货、开会、面试等）
+    visitor_name: Optional[str]           # 访客姓名
 
-    # ── 对话历史摘要（控制 context 大小） ──────────────────────────────────
-    conversation_summary: str            # 对话摘要，由 summarizer 节点维护
-    turn_count: int                      # 当前轮次计数
+    # ── 回访识别 ──────────────────────────────────────────────────────────────
+    is_return_visit: bool                 # 是否回访（主叫号码命中历史记录）
+    return_visit_summary: Optional[str]   # 预注入的回访摘要
+
+    # ── 业务数据 ──────────────────────────────────────────────────────────────
+    visitor_record_id: Optional[int]      # 保存后的 DB 记录 ID
+    call_room_name: Optional[str]         # LiveKit room 名（DB 记录追溯）
+
+    # ── 通话控制字段 ──────────────────────────────────────────────────────────
+    call_status: str                      # inbound_ringing / connected / saving / ended / transferred
+
+    # ── 对话历史摘要 ──────────────────────────────────────────────────────────
+    conversation_summary: str             # 对话摘要
+    turn_count: int                       # 当前轮次计数
     messages: Annotated[list[dict], operator.add]  # 累积的消息列表，支持并行写入
 
-    # ── 业务数据 ──────────────────────────────────────────────────────────
-    available_times: Optional[list[str]] # 查询到的可用时段
-    confirmed_date: Optional[str]        # 确认的预约日期
-    confirmed_time: Optional[str]        # 确认的预约时间
-
-    # ── 错误处理 ──────────────────────────────────────────────────────────
-    error: Optional[str]                 # 错误信息
+    # ── 错误处理 ──────────────────────────────────────────────────────────────
+    error: Optional[str]                  # 错误信息

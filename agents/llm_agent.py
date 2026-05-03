@@ -1,17 +1,15 @@
 """
-外呼智能体 — LangGraph 状态图 + LiveKit 语音框架
+工业园区访客呼入 Agent — 纯 LiveKit AgentSession 驱动
 
 架构：
-  LangGraph 负责对话逻辑流转（greet → chat → 业务工具 → end）
-  LiveKit Agent 负责语音管道（STT → LLM → TTS）和 SIP 通话控制
-  两者通过 OutboundCaller Agent 桥接
+  LiveKit AgentSession 管理 STT → LLM → TTS 语音管道
+  Agent 的 function_tool 处理业务操作（保存访客记录、转接、挂断）
+  系统 prompt 约束 LLM 行为（3 轮采集、何时保存、何时结束）
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -29,176 +27,156 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, cartesia, silero, noise_cancellation
 from livekit.plugins.turn_detector.english import EnglishModel
+from openai.types.chat import ChatCompletionToolParam
+from openai import OpenAI
 
-from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-
-from state.python_state import CallState
-from prompts.llm_prompy import SYSTEM_PROMPT, GREET_INSTRUCTION, CHAT_INSTRUCTION
+from prompts.llm_prompy import SYSTEM_PROMPT, GREET_INSTRUCTION
 from config.livekit_config import SIP_OUTBOUND_TRUNK_ID
-from config.agent_config import fast_llm
-from tool.voice_tool import create_voice_tools, hangup
 
 load_dotenv(dotenv_path=".env.local")
-logger = logging.getLogger("outbound-caller")
+logger = logging.getLogger("park-visitor-agent")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LangGraph 状态图 — 定义对话逻辑流转
+# 辅助函数
 # ══════════════════════════════════════════════════════════════════════════════
 
-def greet_node(state: CallState) -> dict:
-    """开场白节点：生成问候语，确认预约信息"""
-    prompt = GREET_INSTRUCTION.format(
-        appointment_time=state.get("appointment_time", "待确认")
-    )
-    response = fast_llm.invoke([
-        SystemMessage(content=SYSTEM_PROMPT.format(
-            customer_name=state.get("customer_name", "患者"),
-            appointment_time=state.get("appointment_time", "待确认"),
-        )),
-        HumanMessage(content=prompt),
-    ])
-    return {
-        "messages": [{"role": "assistant", "content": response.content}],
-        "next_action": "chat",
-        "turn_count": 1,
-    }
+def extract_caller_number(participant: rtc.RemoteParticipant) -> str:
+    """从 SIP participant 提取主叫号码
 
+    优先读取 SIP attributes，回退解析 participant identity。
+    LiveKit SIP identity 格式常为 "sip_<number>"。
+    """
+    # 优先从 attributes 获取
+    caller_number = participant.attributes.get("sip.caller_number", "")
+    if caller_number:
+        return caller_number
 
-def chat_node(state: CallState) -> dict:
-    """对话节点：处理用户输入，决定下一步动作"""
-    # 构建消息历史
-    messages = [SystemMessage(content=SYSTEM_PROMPT.format(
-        customer_name=state.get("customer_name", "患者"),
-        appointment_time=state.get("appointment_time", "待确认"),
-    ))]
+    # 回退：从 identity 解析
+    identity = participant.identity
+    if identity.startswith("sip_"):
+        return identity[4:]
 
-    # 添加对话历史（最近 10 轮，控制 context 大小）
-    history = state.get("messages", [])[-20:]
-    for msg in history:
-        if msg["role"] == "user":
-            messages.append(HumanMessage(content=msg["content"]))
-        elif msg["role"] == "assistant":
-            messages.append(AIMessage(content=msg["content"]))
-
-    # 添加决策指令
-    messages.append(HumanMessage(content=CHAT_INSTRUCTION))
-
-    response = fast_llm.invoke(messages)
-    content = response.content
-
-    # 根据回复内容判断下一步路由
-    next_action = "chat"  # 默认继续对话
-    if "确认" in content and "预约" in content:
-        next_action = "confirm"
-    elif "查询" in content or "时段" in content or "可用" in content:
-        next_action = "lookup"
-    elif "转接" in content or "人工" in content:
-        next_action = "transfer"
-    elif "结束" in content or "再见" in content or "挂断" in content:
-        next_action = "end"
-    elif "语音信箱" in content:
-        next_action = "voicemail"
-
-    return {
-        "messages": [{"role": "assistant", "content": content}],
-        "next_action": next_action,
-        "turn_count": state.get("turn_count", 0) + 1,
-    }
-
-
-def route_after_chat(state: CallState) -> str:
-    """条件边：根据 next_action 决定下一个节点"""
-    action = state.get("next_action", "chat")
-    # 超过 50 轮自动结束，防止死循环
-    if state.get("turn_count", 0) > 50:
-        return "end"
-    # 映射动作到节点名
-    routing = {
-        "chat": "chat",
-        "confirm": "chat",      # 确认由 LLM 工具处理，回到 chat
-        "lookup": "chat",       # 查询由 LLM 工具处理，回到 chat
-        "transfer": "end",      # 转接 → 结束
-        "end": "end",
-        "voicemail": "end",     # 语音信箱 → 结束
-        "done": END,
-    }
-    return routing.get(action, "chat")
-
-
-def build_call_graph() -> StateGraph:
-    """构建通话状态图"""
-    graph = StateGraph(CallState)
-
-    # 添加节点
-    graph.add_node("greet", greet_node)
-    graph.add_node("chat", chat_node)
-
-    # 设置入口
-    graph.set_entry_point("greet")
-
-    # 添加边
-    graph.add_edge("greet", "chat")
-    graph.add_conditional_edges("chat", route_after_chat, {
-        "chat": "chat",
-        "end": END,
-    })
-
-    return graph.compile()
+    return identity
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LiveKit Agent — 语音管道 + SIP 通话控制
+# LiveKit Agent — 访客呼入登记
 # ══════════════════════════════════════════════════════════════════════════════
 
-class OutboundCaller(Agent):
-    """外呼代理：牙科诊所预约确认助理
+class InboundAgent(Agent):
+    """工业园区访客呼入登记 Agent
 
-    继承 LiveKit Agent，负责语音对话管道。
-    对话逻辑由 LangGraph 状态图驱动（见上方 build_call_graph），
-    但实际语音交互通过 LiveKit AgentSession 的 STT→LLM→TTS 管道完成。
+    纯 LiveKit AgentSession 驱动，无 LangGraph。
+    系统提示词约束 LLM 在 3 轮内采集访客信息并保存。
     """
 
     def __init__(
         self,
         *,
-        name: str,
-        appointment_time: str,
-        dial_info: dict[str, Any],
+        caller_number: str,
+        return_visit_summary: str = "",
+        transfer_to: str = "",
     ):
-        # LangGraph 状态图实例（用于外部状态查询和测试）
-        self.call_graph = build_call_graph()
+        # 构建回访信息段
+        if return_visit_summary:
+            return_visit_section = f"## 回访信息\n{return_visit_summary}"
+        else:
+            return_visit_section = ""
 
-        # 系统提示词，由模板生成
+        # 生成系统提示词
         instructions = SYSTEM_PROMPT.format(
-            customer_name=name,
-            appointment_time=appointment_time,
+            caller_number=caller_number,
+            return_visit_section=return_visit_section,
         )
 
         super().__init__(instructions=instructions)
 
         # 通话上下文
+        self.caller_number = caller_number
+        self.return_visit_summary = return_visit_summary
+        self.visitor_context: dict[str, Any] = {
+            "caller_number": caller_number,
+            "transfer_to": transfer_to,
+            "call_room_name": "",
+        }
         self.participant: rtc.RemoteParticipant | None = None
-        self.dial_info = dial_info
 
-    def set_participant(self, participant: rtc.RemoteParticipant):
-        """设置远端参与者引用"""
+    def set_participant(self, participant: rtc.RemoteParticipant, room_name: str = ""):
+        """设置远端参与者和房间名"""
         self.participant = participant
+        self.visitor_context["call_room_name"] = room_name
 
-    # ── LiveKit function_tools（AI 在对话中直接调用） ──────────────────────
+    # ── LiveKit function_tools ─────────────────────────────────────────────
+
+    @function_tool()
+    async def save_visitor_record(
+        self,
+        ctx: RunContext,
+        caller_number: str,
+        license_plate: str,
+        visiting_company: str,
+        visitor_phone: str,
+        purpose: str,
+        visitor_name: str,
+    ):
+        """访客信息采集完毕后调用，保存访客登记记录。
+
+        Args:
+            caller_number: 呼入主叫号码
+            license_plate: 车牌号
+            visiting_company: 来访单位
+            visitor_phone: 访客联系电话
+            purpose: 来访事由
+            visitor_name: 访客姓名
+        """
+        from infra.visitor_db import save_visitor_record as db_save
+        from infra.wechat_push import push_visitor_to_security
+
+        logger.info(
+            f"保存访客记录: caller={caller_number}, plate={license_plate}, "
+            f"company={visiting_company}, purpose={purpose}"
+        )
+
+        try:
+            record_id = db_save(
+                caller_number=caller_number,
+                license_plate=license_plate or None,
+                visiting_company=visiting_company or None,
+                visitor_phone=visitor_phone or None,
+                purpose=purpose or None,
+                visitor_name=visitor_name or None,
+                call_room_name=self.visitor_context.get("call_room_name", ""),
+            )
+            logger.info(f"访客记录已保存, id={record_id}")
+
+            # 推送微信通知（占位）
+            record = {
+                "caller_number": caller_number,
+                "license_plate": license_plate,
+                "visiting_company": visiting_company,
+                "visitor_phone": visitor_phone,
+                "purpose": purpose,
+                "visitor_name": visitor_name,
+            }
+            await push_visitor_to_security(record)
+
+            return f"访客记录已保存（ID: {record_id}），已通知门卫"
+        except Exception as e:
+            logger.error(f"保存访客记录失败: {e}")
+            return f"保存失败: {e}"
 
     @function_tool()
     async def transfer_call(self, ctx: RunContext):
-        """将通话转接给人工坐席，需在用户确认后调用。"""
-        transfer_to = self.dial_info.get("transfer_to")
+        """访客要求找人工/保安时调用，转接通话。"""
+        transfer_to = self.visitor_context.get("transfer_to")
         if not transfer_to:
-            return "无法转接：未配置转接号码"
+            return "无法转接：未配置保安转接号码"
 
-        logger.info(f"转接通话至 {transfer_to}")
+        logger.info(f"转接通话至保安: {transfer_to}")
+
         await ctx.session.generate_reply(
-            instructions="告知用户即将转接给人工坐席，请稍候"
+            instructions="告知访客即将转接给保安，请稍候"
         )
 
         job_ctx = get_job_context()
@@ -206,7 +184,7 @@ class OutboundCaller(Agent):
             await job_ctx.api.sip.transfer_sip_participant(
                 api.TransferSIPParticipantRequest(
                     room_name=job_ctx.room.name,
-                    participant_identity=self.participant.identity,
+                    participant_identity=self.participant.identity if self.participant else "",
                     transfer_to=f"tel:{transfer_to}",
                 )
             )
@@ -220,43 +198,15 @@ class OutboundCaller(Agent):
 
     @function_tool()
     async def end_call(self, ctx: RunContext):
-        """用户希望结束通话时调用。"""
-        logger.info(f"结束通话")
+        """访客信息已保存或通话结束时调用。"""
+        logger.info("结束通话")
         current_speech = ctx.session.current_speech
         if current_speech:
             await current_speech.wait_for_playout()
         await self.hangup()
 
-    @function_tool()
-    async def look_up_availability(self, ctx: RunContext, date: str):
-        """用户询问其他预约时间时调用，查询指定日期的可用时段。
-
-        Args:
-            date: 要查询可用时间的日期
-        """
-        logger.info(f"查询可用时段: {date}")
-        await asyncio.sleep(2)  # 模拟网络延迟
-        return {"available_times": ["上午 9:00", "上午 10:30", "下午 2:00", "下午 3:30"]}
-
-    @function_tool()
-    async def confirm_appointment(self, ctx: RunContext, date: str, time: str):
-        """用户确认预约时调用，仅在用户确定日期和时间后使用。
-
-        Args:
-            date: 预约日期
-            time: 预约时间
-        """
-        logger.info(f"确认预约: {date} {time}")
-        return "预约已确认"
-
-    @function_tool()
-    async def detected_answering_machine(self, ctx: RunContext):
-        """检测到语音信箱后调用，在听到语音信箱问候语后使用。"""
-        logger.info("检测到语音信箱，挂断")
-        await self.hangup()
-
     async def hangup(self):
-        """挂断通话"""
+        """挂断通话：通过删除房间来结束呼叫。"""
         job_ctx = get_job_context()
         await job_ctx.api.room.delete_room(
             api.DeleteRoomRequest(room=job_ctx.room.name)
@@ -264,24 +214,49 @@ class OutboundCaller(Agent):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 入口函数 — LiveKit Worker 调度时调用
+# 入口函数 — 呼入模式
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def entrypoint(ctx: JobContext):
-    """代理入口函数，由 LiveKit Agents 框架在收到调度任务时调用。"""
+async def inbound_entrypoint(ctx: JobContext):
+    """呼入入口函数，由 LiveKit Agents 框架在收到调度任务时调用。
+
+    呼入流程：SIP trunk 自动创建 Room → Agent dispatch 加入 → 等待来电方
+    """
     logger.info(f"连接房间: {ctx.room.name}")
     await ctx.connect()
 
-    # 解析调度元数据
-    dial_info = json.loads(ctx.job.metadata)
-    participant_identity = phone_number = dial_info["phone_number"]
+    # 等待来电方加入（SIP inbound 自动创建 participant）
+    participant = await ctx.wait_for_participant()
+    logger.info(f"来电方加入: {participant.identity}")
 
-    # 创建代理实例
-    agent = OutboundCaller(
-        name=dial_info.get("customer_name", "患者"),
-        appointment_time=dial_info.get("appointment_time", "待确认"),
-        dial_info=dial_info,
+    # 提取主叫号码
+    caller_number = extract_caller_number(participant)
+    logger.info(f"主叫号码: {caller_number}")
+
+    # 查询回访信息（预注入）
+    from infra.visitor_db import lookup_visitor_by_phone, format_return_visit_summary
+    try:
+        previous_records = lookup_visitor_by_phone(caller_number)
+        is_return_visit = len(previous_records) > 0
+        return_visit_summary = format_return_visit_summary(previous_records)
+        if is_return_visit:
+            logger.info(f"回访识别: {return_visit_summary}")
+    except Exception as e:
+        logger.warning(f"回访查询失败（继续作为新访客处理）: {e}")
+        is_return_visit = False
+        return_visit_summary = ""
+
+    # 获取保安转接号码
+    import os
+    transfer_to = os.getenv("SECURITY_TRANSFER_NUMBER", "")
+
+    # 创建 Agent 实例
+    agent = InboundAgent(
+        caller_number=caller_number,
+        return_visit_summary=return_visit_summary,
+        transfer_to=transfer_to,
     )
+    agent.set_participant(participant, room_name=ctx.room.name)
 
     # 配置语音管道：STT → LLM → TTS
     session = AgentSession(
@@ -289,44 +264,17 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         tts=cartesia.TTS(),
-        llm=ChatOpenAI(model="gpt-4o", temperature=0.7),  # 用 LangChain LLM
+        llm=OpenAI(model="gpt-4o", temperature=0.7),
     )
 
-    # 先启动会话再拨号，确保不遗漏任何语音输入
-    session_started = asyncio.create_task(
-        session.start(
-            agent=agent,
-            room=ctx.room,
-            room_input_options=RoomInputOptions(
-                noise_cancellation=noise_cancellation.BVCTelephony(),
-            ),
-        )
+    # 启动会话（无 SIP 拨号 — 来电方已在房间中）
+    await session.start(
+        agent=agent,
+        room=ctx.room,
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVCTelephony(),
+        ),
     )
-
-    # 通过 SIP 拨打电话
-    try:
-        await ctx.api.sip.create_sip_participant(
-            api.CreateSIPParticipantRequest(
-                room_name=ctx.room.name,
-                sip_trunk_id=SIP_OUTBOUND_TRUNK_ID,
-                sip_call_to=phone_number,
-                participant_identity=participant_identity,
-                wait_until_answered=True,
-            )
-        )
-
-        await session_started
-        participant = await ctx.wait_for_participant(identity=participant_identity)
-        logger.info(f"参与者加入: {participant.identity}")
-        agent.set_participant(participant)
-
-    except api.TwirpError as e:
-        logger.error(
-            f"SIP 呼叫失败: {e.message}, "
-            f"SIP 状态: {e.metadata.get('sip_status_code')} "
-            f"{e.metadata.get('sip_status')}"
-        )
-        ctx.shutdown()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -336,7 +284,7 @@ async def entrypoint(ctx: JobContext):
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            agent_name="outbound-caller",
+            entrypoint_fnc=inbound_entrypoint,
+            agent_name="park-visitor-agent",
         )
     )

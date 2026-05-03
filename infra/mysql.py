@@ -13,11 +13,11 @@ def _get_pool() -> MySQLConnectionPool:
     global _pool
     if _pool is None:
         _pool = MySQLConnectionPool(
-            pool_name="mibo",
+            pool_name="phone_agent",
             pool_size=int(os.getenv("MYSQL_POOL_SIZE", "5")),
             host=os.getenv("MYSQL_HOST", "localhost"),
             port=int(os.getenv("MYSQL_PORT", "3306")),
-            database=os.getenv("MYSQL_DATABASE", "mibo"),
+            database=os.getenv("MYSQL_DATABASE", "phone_agent"),
             user=os.getenv("MYSQL_USER", "root"),
             password=os.getenv("MYSQL_PASSWORD", "jyf111229"),
             charset="utf8mb4",
