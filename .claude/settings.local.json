@@ -22,7 +22,17 @@
       "WebFetch(domain:docs.livekit.io)",
       "Bash(gh api:*)",
       "Bash(pip index:*)",
-      "Bash(uv pip:*)"
+      "Bash(uv pip:*)",
+      "Bash(dir /s /b \"D:\\\\outbound-caller-python\\\\*livekit-plugins-volcengine*\")",
+      "Bash(find /f \"D:\\\\outbound-caller-python\\\\*livekit-plugins-volcengine*\")",
+      "Bash(dir /b /ad \"D:\\\\outbound-caller-python\\\\Lib\\\\site-packages\\\\*volc*\")",
+      "Bash(dir \"D:\\\\outbound-caller-python\\\\Lib\\\\site-packages\")",
+      "Bash(findstr livekit:*)",
+      "Bash(dir \"D:\\\\outbound-caller-python\\\\venv\\\\Lib\\\\site-packages\")",
+      "Bash(findstr -i volc)",
+      "Bash(dir /s /b \".venv\\\\Lib\\\\site-packages\\\\*volcengine*\")",
+      "Bash(dir *volc*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

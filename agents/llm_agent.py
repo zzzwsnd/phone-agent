@@ -28,8 +28,8 @@ from livekit.agents import (
     get_job_context,
     cli,
     WorkerOptions,
-    RoomInputOptions,
 )
+from livekit.agents.voice.room_io import RoomOptions, AudioInputOptions
 from livekit.plugins import volcengine, silero, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from livekit.plugins.openai import LLM as OpenAILLM
@@ -255,10 +255,12 @@ def build_agent_session() -> AgentSession:
         stt=volcengine.STT(
             app_id=VOLCENGINE_STT_APP_ID,
             cluster=VOLCENGINE_STT_CLUSTER,
+            access_token=VOLCENGINE_STT_ACCESS_TOKEN,
         ),
         tts=volcengine.TTS(
             app_id=VOLCENGINE_TTS_APP_ID,
             cluster=VOLCENGINE_TTS_CLUSTER,
+            access_token=VOLCENGINE_TTS_ACCESS_TOKEN,
             voice="BV001_V2_streaming",
         ),
         llm=OpenAILLM(
@@ -356,10 +358,17 @@ async def inbound_entrypoint(ctx: JobContext):
     await session.start(
         agent=agent,
         room=ctx.room,
-        room_input_options=RoomInputOptions(
-            noise_cancellation=noise_cancellation.BVCTelephony(),
+        room_options=RoomOptions(
+            audio_input=AudioInputOptions(
+                noise_cancellation=noise_cancellation.BVCTelephony(),
+            ),
         ),
     )
+
+    # 主动发起开场白 — 来电方在等 AI 先说话，不主动开口会导致双方沉默
+    # 使用 say() 直接 TTS，绕过 LLM 延迟（电话场景需要即时响应）
+    greeting = "您好，请问车牌号多少，今天找哪家公司，什么事儿？"
+    await session.say(greeting)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
