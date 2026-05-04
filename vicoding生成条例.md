@@ -393,3 +393,326 @@
 1. 验证 CLAUDE.md 中所有文件路径准确
 2. 验证无"齿科"、无"LangGraph"、无"LangChain"残留
 3. 验证环境变量列表完整
+
+---
+
+## Phase 6: STT/TTS/LLM 切换至火山引擎（Volcengine）
+
+> 改造目标：将语音管道从 Deepgram(STT) + Cartesia(TTS) + OpenAI gpt-4o(LLM) 切换为火山引擎全家桶
+> 技术选型：`livekit-plugins-volcengine`（第三方社区插件 v1.3.0，Apache-2.0）+ 火山方舟 GLM-5.1
+> 配置来源：所有变量从 `.env.local` 读取，不从控制台获取
+
+---
+
+### 6.1 安装 volcengine 插件，更新依赖 ✅ 已完成
+
+**文件**: `pyproject.toml`
+
+**改动内容**:
+- **移除**依赖: `livekit-plugins-deepgram`, `livekit-plugins-cartesia`
+- **新增**依赖: `livekit-plugins-volcengine`
+- **保留**依赖: `livekit-plugins-openai`（LLM 通过 OpenAI 兼容接口接入火山方舟，仍需此包）
+- 注意：`livekit-plugins-volcengine==1.3.0` 锁死 `livekit-agents==1.2.9`，与项目 `>=1.5.7` 冲突，需 `--no-deps` 安装
+- 旧包 `livekit-plugins-deepgram` 和 `livekit-plugins-cartesia` 已手动 `uv pip uninstall` 清除
+
+**测试结果**:
+1. ✅ `uv pip install livekit-plugins-volcengine==1.3.0 --no-deps` 安装成功
+2. ✅ `from livekit.plugins import volcengine` 可导入
+3. ✅ `from livekit.plugins import deepgram` ImportError
+4. ✅ `from livekit.plugins import cartesia` ImportError
+5. ✅ `from livekit.plugins.openai import LLM` 可导入
+
+---
+
+### 6.2 新增火山引擎环境变量 ✅ 已完成
+
+**文件**: `.env.local`
+
+**改动内容**:
+- **移除**变量: `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`
+- **新增**变量:
+  ```
+  # ── 火山引擎 STT（语音识别）──
+  VOLCENGINE_STT_APP_ID=2000000737127773250
+  VOLCENGINE_STT_CLUSTER=volcengine_streaming_common
+  VOLCENGINE_ACCESS_TOKEN=1d55630e-5ec7-44cd-b0cd-78efc0b3062e
+
+  # ── 火山引擎 TTS（语音合成）──
+  VOLCENGINE_TTS_APP_ID=2000000737280982434
+  VOLCENGINE_TTS_CLUSTER=volcano_tts
+  # VOLCENGINE_ACCESS_TOKEN — 与 STT 共用，不重复声明
+
+  # ── 火山方舟 LLM ──
+  VOLCENGINE_LLM_API_KEY=1d55630e-5ec7-44cd-b0cd-78efc0b3062e
+  VOLCENGINE_LLM_MODEL=glm-5.1
+  VOLCENGINE_LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+  ```
+- STT 和 TTS 暂用同一个 access_token（`VOLCENGINE_ACCESS_TOKEN`）
+- LLM 的 API Key 也暂用同一个值（`VOLCENGINE_LLM_API_KEY`），后续如果分离可独立配置
+
+**测试用例**:
+1. 在 Python 中执行 `load_dotenv(dotenv_path=".env.local")` 后，验证 `os.getenv("VOLCENGINE_STT_APP_ID")` 为 `"2000000737127773250"`
+2. 验证 `os.getenv("VOLCENGINE_TTS_APP_ID")` 为 `"2000000737280982434"`
+3. 验证 `os.getenv("VOLCENGINE_ACCESS_TOKEN")` 非空
+4. 验证 `os.getenv("VOLCENGINE_LLM_API_KEY")` 非空
+5. 验证 `os.getenv("DEEPGRAM_API_KEY")` 为 None（已移除）
+6. 验证 `os.getenv("CARTESIA_API_KEY")` 为 None（已移除）
+
+---
+
+### 6.3 更新配置模块 ✅ 已完成
+
+**文件**: `config/livekit_config.py`
+
+**改动内容**:
+- **移除**已注释的 Deepgram/Cartesia 相关代码
+- **新增**火山引擎配置读取:
+  ```python
+  # ── 火山引擎 STT ────────────────────────────────────────────────────
+  VOLCENGINE_STT_APP_ID = os.getenv("VOLCENGINE_STT_APP_ID", "")
+  VOLCENGINE_STT_CLUSTER = os.getenv("VOLCENGINE_STT_CLUSTER", "volcengine_streaming_common")
+
+  # ── 火山引擎 TTS ────────────────────────────────────────────────────
+  VOLCENGINE_TTS_APP_ID = os.getenv("VOLCENGINE_TTS_APP_ID", "")
+  VOLCENGINE_TTS_CLUSTER = os.getenv("VOLCENGINE_TTS_CLUSTER", "volcano_tts")
+
+  # ── 火山引擎 Access Token（STT/TTS 共用）────────────────────────────
+  VOLCENGINE_ACCESS_TOKEN = os.getenv("VOLCENGINE_ACCESS_TOKEN", "")
+
+  # ── 火山方舟 LLM ────────────────────────────────────────────────────
+  VOLCENGINE_LLM_API_KEY = os.getenv("VOLCENGINE_LLM_API_KEY", "")
+  VOLCENGINE_LLM_MODEL = os.getenv("VOLCENGINE_LLM_MODEL", "glm-5.1")
+  VOLCENGINE_LLM_BASE_URL = os.getenv("VOLCENGINE_LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+  ```
+- 确保 `load_dotenv(dotenv_path=".env.local")` 正确加载（当前文件用的是 `load_dotenv()`，需改为显式指定 `.env.local`）
+
+**测试用例**:
+1. 设置完整 `.env.local` 后导入模块，验证 `VOLCENGINE_STT_APP_ID == "2000000737127773250"`
+2. 验证 `VOLCENGINE_TTS_APP_ID == "2000000737280982434"`
+3. 验证 `VOLCENGINE_ACCESS_TOKEN` 非空
+4. 验证 `VOLCENGINE_LLM_MODEL == "glm-5.1"`
+5. 验证 `VOLCENGINE_LLM_BASE_URL == "https://ark.cn-beijing.volces.com/api/v3"`
+6. `.env.local` 为空时，验证默认值生效：`VOLCENGINE_STT_CLUSTER == "volcengine_streaming_common"`
+
+---
+
+### 6.4 替换 STT：Deepgram → 火山引擎 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- **移除** import: `from livekit.plugins import deepgram`
+- **新增** import: `from livekit.plugins import volcengine`
+- **新增** import: `from config.livekit_config import (VOLCENGINE_STT_APP_ID, VOLCENGINE_STT_CLUSTER, VOLCENGINE_ACCESS_TOKEN, VOLCENGINE_TTS_APP_ID, VOLCENGINE_TTS_CLUSTER, VOLCENGINE_LLM_API_KEY, VOLCENGINE_LLM_MODEL, VOLCENGINE_LLM_BASE_URL)`
+- **替换** STT 实例化（第 269 行）:
+  - 旧: `stt=deepgram.STT(language="zh-CN", model="nova-3")`
+  - 新: `stt=volcengine.STT(app_id=VOLCENGINE_STT_APP_ID, cluster=VOLCENGINE_STT_CLUSTER, language="zh-CN")`
+- 火山引擎 STT 通过环境变量 `VOLCENGINE_ACCESS_TOKEN` 自动获取认证令牌，无需显式传参
+
+**测试用例**:
+1. 移除 `DEEPGRAM_API_KEY` 环境变量后启动 Agent，验证无 Deepgram 相关报错
+2. 设置完整火山引擎环境变量后启动 Agent，验证 `volcengine.STT` 实例化成功
+3. 缺少 `VOLCENGINE_STT_APP_ID` 时，验证启动报错并给出明确提示（如 "VOLCENGINE_STT_APP_ID not configured"）
+4. 验证 `volcengine.STT` 对象的 `language` 属性为 `"zh-CN"`
+
+---
+
+### 6.5 替换 TTS：Cartesia → 火山引擎 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- **移除** import: `from livekit.plugins import cartesia`
+- **替换** TTS 实例化（第 270 行）:
+  - 旧: `tts=cartesia.TTS(language="zh", model="sonic-3")`
+  - 新: `tts=volcengine.TTS(app_id=VOLCENGINE_TTS_APP_ID, cluster=VOLCENGINE_TTS_CLUSTER, voice_type="BV001_V2_streaming")`
+- 音色使用默认的 `BV001_V2_streaming`（通用女声），后续可通过环境变量 `VOLCENGINE_TTS_VOICE_TYPE` 扩展
+
+**测试用例**:
+1. 移除 `CARTESIA_API_KEY` 环境变量后启动 Agent，验证无 Cartesia 相关报错
+2. 设置完整火山引擎环境变量后启动 Agent，验证 `volcengine.TTS` 实例化成功
+3. 缺少 `VOLCENGINE_TTS_APP_ID` 时，验证启动报错并给出明确提示
+4. 验证 TTS 实例的 `voice_type` 为 `"BV001_V2_streaming"`
+5. 播放测试文本"您好，请问车牌号多少"，验证语音输出为中文女声
+
+---
+
+### 6.6 替换 LLM：OpenAI gpt-4o → 火山方舟 GLM-5.1 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- **保留** import: `from livekit.plugins.openai import LLM as OpenAILLM`（火山方舟 ARK 平台兼容 OpenAI API 格式，直接用 OpenAI 插件）
+- **替换** LLM 实例化（第 271 行）:
+  - 旧: `llm=OpenAILLM(model="gpt-4o", temperature=0.7)`
+  - 新: `llm=OpenAILLM(model=VOLCENGINE_LLM_MODEL, base_url=VOLCENGINE_LLM_BASE_URL, api_key=VOLCENGINE_LLM_API_KEY, temperature=0.7)`
+- 不使用 `volcengine.LLM()`，改用 OpenAI 兼容接口（经过确认 `volcengine.LLM()` 不支持 GLM-5.1 的自定义 endpoint ID，而 OpenAI 插件 + ARK base_url 方案灵活可控）
+
+**测试用例**:
+1. 设置 `VOLCENGINE_LLM_API_KEY` 和 `VOLCENGINE_LLM_MODEL` 后实例化 LLM，验证无报错
+2. 缺少 `VOLCENGINE_LLM_API_KEY` 时，验证报错提示缺少 API Key
+3. 验证 LLM 的 `model` 属性为 `"glm-5.1"`（或用户指定的 endpoint ID）
+4. 验证 LLM 的 `base_url` 为 `"https://ark.cn-beijing.volces.com/api/v3"`
+5. 构造简单对话 "你好"，验证 LLM 返回中文回复
+
+---
+
+### 6.7 提取 AgentSession 构建为独立函数 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- 新增函数 `build_agent_session() -> AgentSession`:
+  ```python
+  def build_agent_session() -> AgentSession:
+      """构建火山引擎语音管道：STT → LLM → TTS"""
+      return AgentSession(
+          turn_detection=MultilingualModel(),
+          vad=silero.VAD.load(),
+          stt=volcengine.STT(
+              app_id=VOLCENGINE_STT_APP_ID,
+              cluster=VOLCENGINE_STT_CLUSTER,
+              language="zh-CN",
+          ),
+          tts=volcengine.TTS(
+              app_id=VOLCENGINE_TTS_APP_ID,
+              cluster=VOLCENGINE_TTS_CLUSTER,
+              voice_type="BV001_V2_streaming",
+          ),
+          llm=OpenAILLM(
+              model=VOLCENGINE_LLM_MODEL,
+              base_url=VOLCENGINE_LLM_BASE_URL,
+              api_key=VOLCENGINE_LLM_API_KEY,
+              temperature=0.7,
+          ),
+          min_endpointing_delay=1.5,
+      )
+  ```
+- 在 `inbound_entrypoint` 中调用 `session = build_agent_session()` 替代内联构建
+- 好处：未来切换提供商只改此函数 + 配置，无需修改 entrypoint 逻辑
+
+**测试用例**:
+1. 调用 `build_agent_session()` 返回 `AgentSession` 实例，验证 `session.stt` 为 `volcengine.STT` 类型
+2. 验证 `session.tts` 为 `volcengine.TTS` 类型
+3. 验证 `session.llm` 为 `OpenAILLM` 类型且 model 含 "glm" 或 "ep-"
+4. 验证 `session.min_endpointing_delay == 1.5`
+5. 缺少必要环境变量时，验证函数抛出明确异常
+
+---
+
+### 6.8 新增启动前环境变量校验 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- 在 `inbound_entrypoint` 函数开头新增校验逻辑:
+  ```python
+  # 校验火山引擎必填配置
+  missing = []
+  if not VOLCENGINE_STT_APP_ID:
+      missing.append("VOLCENGINE_STT_APP_ID")
+  if not VOLCENGINE_TTS_APP_ID:
+      missing.append("VOLCENGINE_TTS_APP_ID")
+  if not VOLCENGINE_ACCESS_TOKEN:
+      missing.append("VOLCENGINE_ACCESS_TOKEN")
+  if not VOLCENGINE_LLM_API_KEY:
+      missing.append("VOLCENGINE_LLM_API_KEY")
+  if missing:
+      logger.error(f"缺少火山引擎必填配置: {', '.join(missing)}，请在 .env.local 中设置")
+      return
+  ```
+- 校验失败时 `logger.error` 并 `return`，不 crash 整个 Worker 进程
+- 这样 Worker 仍可接收其他 Job，只是当前 Job 跳过
+
+**测试用例**:
+1. 所有环境变量齐全时，验证校验通过，无日志报错
+2. 移除 `VOLCENGINE_STT_APP_ID`，验证日志输出 "缺少火山引擎必填配置: VOLCENGINE_STT_APP_ID"
+3. 移除多个变量，验证日志列出所有缺失项
+4. 校验失败后，验证函数提前 return，不执行后续 `ctx.connect()` 等操作
+
+---
+
+### 6.9 更新 import 清单 ✅ 已完成
+
+**文件**: `agents/llm_agent.py`
+
+**改动内容**:
+- 完整 import 变更汇总:
+  ```python
+  # ── 移除 ──
+  # from livekit.plugins import deepgram
+  # from livekit.plugins import cartesia
+
+  # ── 新增 ──
+  from livekit.plugins import volcengine
+  from config.livekit_config import (
+      VOLCENGINE_STT_APP_ID,
+      VOLCENGINE_STT_CLUSTER,
+      VOLCENGINE_ACCESS_TOKEN,
+      VOLCENGINE_TTS_APP_ID,
+      VOLCENGINE_TTS_CLUSTER,
+      VOLCENGINE_LLM_API_KEY,
+      VOLCENGINE_LLM_MODEL,
+      VOLCENGINE_LLM_BASE_URL,
+  )
+
+  # ── 保留 ──
+  from livekit.plugins import silero, noise_cancellation
+  from livekit.plugins.turn_detector.multilingual import MultilingualModel
+  from livekit.plugins.openai import LLM as OpenAILLM
+  ```
+- 验证文件中无残留的 `deepgram` 或 `cartesia` 引用
+
+**测试用例**:
+1. `python -c "from agents.llm_agent import InboundAgent; print('OK')"` 验证模块导入无报错
+2. 在 `agents/llm_agent.py` 中搜索 `deepgram`，验证无匹配
+3. 在 `agents/llm_agent.py` 中搜索 `cartesia`，验证无匹配
+4. 搜索 `volcengine`，验证至少出现 3 次（import + STT + TTS）
+
+---
+
+### 6.10 端到端集成测试 ⏳ 待手动测试
+
+**文件**: 无（手动测试流程）
+
+**测试步骤**:
+1. 确认 `.env.local` 配置完整（STT_APP_ID、TTS_APP_ID、ACCESS_TOKEN、LLM_API_KEY）
+2. 启动 API 服务: `python main.py`
+3. 启动 Agent Worker: `python agents/llm_agent.py dev`
+4. 通过 SIP 呼入号码拨打，验证:
+   - **STT**: 语音被正确识别为中文文字（日志 `[STT] 识别结果` 输出中文）
+   - **LLM**: GLM-5.1 生成中文回复（日志 `[LLM] 回复完成` 输出中文）
+   - **TTS**: 回复被合成为中文女声语音播放（日志 `[TTS] 开始语音合成`）
+   - **对话**: 3 轮内完成访客信息采集
+   - **保存**: `save_visitor_record` 被调用，DB 中有新记录
+5. 验证回访场景：用同一号码再次拨打，验证 AI 识别回访并确认信息
+
+**测试用例**:
+1. 首次呼入：AI 说 "您好，请问车牌号多少..."，STT 识别语音 → LLM 回复 → TTS 播放，3 轮内保存记录
+2. 回访呼入：AI 说 "X先生您好，今天是不是和上次一样..."，确认后快速保存
+3. 转接场景：说 "我要找保安"，AI 调用 `transfer_call`
+4. 无语音超时：长时间不说话，验证 Agent 不会卡死（由 VAD + turn_detection 处理）
+5. 噪音场景：背景嘈杂时呼入，验证 BVC 降噪 + 火山 STT 仍能正确识别
+
+---
+
+### 6.11 更新 CLAUDE.md 文档 ✅ 已完成
+
+**文件**: `CLAUDE.md`
+
+**改动内容**:
+- 架构描述：STT 从 "Deepgram" 更新为 "火山引擎(Volcengine)"
+- 架构描述：TTS 从 "Cartesia" 更新为 "火山引擎(Volcengine)"
+- LLM 配置说明：从 `OpenAI(model="gpt-4o")` 更新为 `OpenAI(model="glm-5.1", base_url="https://ark.cn-beijing.volces.com/api/v3")`
+- 环境变量列表：
+  - 移除 `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`
+  - 新增 `VOLCENGINE_STT_APP_ID`, `VOLCENGINE_STT_CLUSTER`, `VOLCENGINE_TTS_APP_ID`, `VOLCENGINE_TTS_CLUSTER`, `VOLCENGINE_ACCESS_TOKEN`, `VOLCENGINE_LLM_API_KEY`, `VOLCENGINE_LLM_MODEL`, `VOLCENGINE_LLM_BASE_URL`
+- 核心文件列表：`config/livekit_config.py` 说明新增火山引擎配置
+- 新增说明：LLM 通过 OpenAI 兼容接口接入火山方舟，不使用 `volcengine.LLM()`
+
+**测试用例**:
+1. 验证 CLAUDE.md 中无 "Deepgram" 残留
+2. 验证 CLAUDE.md 中无 "Cartesia" 残留
+3. 验证 CLAUDE.md 中无 "gpt-4o" 残留
+4. 验证 `VOLCENGINE_*` 环境变量列表完整（共 8 个）
+5. 验证 LLM 配置说明包含 "glm-5.1" 和 "火山方舟"

@@ -20,7 +20,9 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.livekit.io)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(pip index:*)",
+      "Bash(uv pip:*)"
     ]
   }
 }

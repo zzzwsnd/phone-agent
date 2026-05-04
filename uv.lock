@@ -781,6 +781,34 @@ wheels = [
 ]
 
 [[package]]
+name = "kaldifst"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/ad/3d2bbf5e91f05d78c385510d04d4749948856a2db3a01034d36904e2a6e9/kaldifst-1.8.0.tar.gz", hash = "sha256:80c8b819cb762ab6251578444e8b80379049a85a122ac74d37b2534faa45b63a", size = 154383, upload-time = "2026-04-09T13:14:36.102Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/1e/c1fddc62632014f10d891feb457929119845213418ab51d5353af8cff7df/kaldifst-1.8.0-cp312-cp312-macosx_10_15_universal2.whl", hash = "sha256:4e7cec0eea5e72f87ad915c7a0762404331cf5f6f04517292fe50f8de4e98f39", size = 2151447, upload-time = "2026-04-09T13:12:29.577Z" },
+    { url = "https://files.pythonhosted.org/packages/73/b3/6f1ac9dfad226fd940eca8e61d89c760fc315eaf18a3db6633c95988d48e/kaldifst-1.8.0-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:f86c756e09dddee70a0609b7f87aa749d965e2ca1acddbc1220fa0807c3d3e16", size = 1142310, upload-time = "2026-04-09T13:02:06.8Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/30/7f8f3b350dc8b2961da4b5bc5af9fd9478f6084173d5f13a0fe25e06686f/kaldifst-1.8.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a6ff7845e27c58a71ff4841050fadbbab6c75444645d9e2bc9834f8dbae6c10e", size = 1019098, upload-time = "2026-04-09T13:41:15.94Z" },
+    { url = "https://files.pythonhosted.org/packages/29/63/09324462016f14dac99f975c4e94cbe9ea90aa2795a9142e98424df931b5/kaldifst-1.8.0-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5f4cc1ab32cdc68bad732154fec2bd69032a94ed498705b5423cd17499214ab0", size = 1357280, upload-time = "2026-04-09T13:13:29.875Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/bd/dcf9d079cdf158360bdce69762b22d4fc3eccde89d6b08e180af7f42274c/kaldifst-1.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:70e28ca1b1ed68ad61988d684754ff43ba6386d177ec24f8445bab316e10c3d0", size = 1466422, upload-time = "2026-04-09T13:14:56.638Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/1a/56b249c7cfdc80bd4e84b2076e06a68a76418cb27e277eb36a0be8bb3075/kaldifst-1.8.0-cp312-cp312-win32.whl", hash = "sha256:8512e2a9a175f7d8521b2956aa4e4dbed01026123bd6947f7f37c3c750832e04", size = 1013100, upload-time = "2026-04-09T13:15:09.981Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/b2/6445e81706075c6ccaf0eba59df45fdf966f7e48e4e0c5f4585aa7458f02/kaldifst-1.8.0-cp312-cp312-win_amd64.whl", hash = "sha256:b1d28cd0e25f9250b720b3fca9aa8f06b35fd09a7944bb0a1306c137702f9dd0", size = 1094573, upload-time = "2026-04-09T13:13:59.448Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/ed/edc85d2f3747052299b2a514e2fb5998e5bc8641a0e11a992059c27d3129/kaldifst-1.8.0-cp313-cp313-macosx_10_15_universal2.whl", hash = "sha256:433435bb87fd6c787659ac9a366e800aedffe2109c762a959fc8b9f0da66483b", size = 2151690, upload-time = "2026-04-09T13:30:12.145Z" },
+    { url = "https://files.pythonhosted.org/packages/10/3a/6d1d91d05628ac9c9f5fb08c1c6e7b7a4ce021db9d8b70999ad4a1d4e973/kaldifst-1.8.0-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:3246355360361e1eb1044cdba3cada59ab75393af02ef2d5c63b6784825d1647", size = 1142397, upload-time = "2026-04-09T13:35:38.643Z" },
+    { url = "https://files.pythonhosted.org/packages/05/02/3d4782c8d5449b3ed58af25c2a920a778f0ffdbaaa9d2f713dfd4929da81/kaldifst-1.8.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:20e556566ef569b5d6e43832b9390ad63a28048e2f6a30a01b7262c723af7ccf", size = 1019321, upload-time = "2026-04-09T13:23:24.101Z" },
+    { url = "https://files.pythonhosted.org/packages/be/32/1cc0e0c6adbb835609041b96a5fbe5da507bad5e56298f0ad90fb3af264c/kaldifst-1.8.0-cp313-cp313-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e309a01d2d1c235facb44db0e8a8ddcd2920f0cb59cb346315012e36470c27fa", size = 1357249, upload-time = "2026-04-09T13:13:48.372Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/52/5e2a280adbde4363c233f69f61e3523075cd56919462a59ce96a612ef0ec/kaldifst-1.8.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e9c92b57e2eb9f81e294b6974392af820082c88626b80c54722165c7d255a859", size = 1466563, upload-time = "2026-04-09T13:14:35.224Z" },
+    { url = "https://files.pythonhosted.org/packages/99/70/a5c029e14a14f4b603c8034df4ec59ebac35e9b0fa18749014b4e1b60a6b/kaldifst-1.8.0-cp313-cp313-win32.whl", hash = "sha256:2038f31f6fbbaf5b22e86e2790ab237f9f78543c694d48ffa39cc7b311fb471c", size = 1012996, upload-time = "2026-04-09T13:14:50.046Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/28/137d50472d3c693cc0b20d5893959814752af2a53b74017d948e8f280725/kaldifst-1.8.0-cp313-cp313-win_amd64.whl", hash = "sha256:a1e8e995f2637fd00c41a60ab6ce491496db498847f06bf4e70ae2ecef3cc6bd", size = 1094590, upload-time = "2026-04-09T13:13:50.532Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/16/3b65a80adf45b225934bdabf15a07d8cb3d9a387dffa5443d76ff30b19cd/kaldifst-1.8.0-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:898070de62412788b86c11c0924b2e3aaf46c64c09f5e46d5204e273616da524", size = 2152538, upload-time = "2026-04-09T13:14:10.232Z" },
+    { url = "https://files.pythonhosted.org/packages/de/1e/d1c4cf682b56407e3177a31f471b4e488b996218762d6093e8a82a2837e1/kaldifst-1.8.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:0e8bf459c4e3cacac9c05dd159121aed3cf5a772b65dbf6bf2b65f4782392be9", size = 1142908, upload-time = "2026-04-09T13:16:04.806Z" },
+    { url = "https://files.pythonhosted.org/packages/07/5c/56cb73854441df0a688727507dc3718a9927619a1e518516faf32de9ed96/kaldifst-1.8.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:d1851c9252fabb0bb831d7dbe3ca8629b1b78743ca62b2114f20af4585baf3eb", size = 1020302, upload-time = "2026-04-09T13:35:28.309Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/93/08dfb3cd2acf47a9aa09f78c7be6386ebbd637b5f6dde3ad9161df13b424/kaldifst-1.8.0-cp314-cp314-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7d67613ffa6bb40cfe85a471a1d028f20e0219abdeb1db6f225bcdc77d656def", size = 1358507, upload-time = "2026-04-09T13:13:32.075Z" },
+    { url = "https://files.pythonhosted.org/packages/64/89/35c5e00b75dbb8d5ec8897453538f2944cbc822062eebffbfbe70bbb3d43/kaldifst-1.8.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9a6b7e97c61958b5044d11d2ad8552015fbf798360cf6aa9061b1029591109b9", size = 1467446, upload-time = "2026-04-09T13:14:56.776Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/52/6fe13446e085f70438ed4ffaa2a61b3e65751af80a096bc7b9fd6be9ad80/kaldifst-1.8.0-cp314-cp314-win32.whl", hash = "sha256:de51e91517f86db14180ef70a00baca3b677fe47f61bf6e3eb2ff77d8f3b79df", size = 1027152, upload-time = "2026-04-09T13:14:44.567Z" },
+]
+
+[[package]]
 name = "livekit"
 version = "1.1.7"
 source = { registry = "https://pypi.org/simple" }
@@ -890,31 +918,6 @@ wheels = [
 ]
 
 [[package]]
-name = "livekit-plugins-cartesia"
-version = "1.5.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "livekit-agents" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/92/64c609abe21a40ba5be899666db53980f65ab60ddd1294fec0dde04a5ab8/livekit_plugins_cartesia-1.5.7.tar.gz", hash = "sha256:0f4dba24b247bd6c52064b0c17643256018b5f8a044318b98e18d1355b4c9d1c", size = 12798, upload-time = "2026-04-30T20:38:56.523Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/6b/c273e9432e88987dc2f5c2afc82e6356b9b7cfa99dce7a9bf5d70078621e/livekit_plugins_cartesia-1.5.7-py3-none-any.whl", hash = "sha256:f1f6373fc4e16c2ca0b4f2a50349fc2003109742e40557d056a6de58448bcb61", size = 15724, upload-time = "2026-04-30T20:38:55.292Z" },
-]
-
-[[package]]
-name = "livekit-plugins-deepgram"
-version = "1.5.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "livekit-agents", extra = ["codecs"] },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/00/b766d9737a16e38e63a1502352913cd719ee25bf17ea69a175ab926b7301/livekit_plugins_deepgram-1.5.7.tar.gz", hash = "sha256:37d4aedcb7a26366898a9d4b8be9d69fc05541bd4ea7310bdd300c37fc295689", size = 18033, upload-time = "2026-04-30T20:38:55.195Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/17/db/b5e3fa254a2a7ad40a4d3c62cfe45f0aa57a959abdded87aa9fac2fd889e/livekit_plugins_deepgram-1.5.7-py3-none-any.whl", hash = "sha256:1bd45f40ff4c449bb63e7e2b5aa50818f4801ef81f2d2d84dc51f5ccc2f88c9c", size = 22820, upload-time = "2026-04-30T20:38:54.1Z" },
-]
-
-[[package]]
 name = "livekit-plugins-noise-cancellation"
 version = "0.2.5"
 source = { registry = "https://pypi.org/simple" }
@@ -970,6 +973,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/1d/5b33aea754cb45ad389a97e91e86b31e7aab1d70a6c1da6051f5d7458c50/livekit_plugins_turn_detector-1.5.7.tar.gz", hash = "sha256:fba4666239ab94c211283332dce61e5dc2b28dcb65e156865ee0bfa4f8c68ccf", size = 8717, upload-time = "2026-04-30T20:40:43.959Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/00/5069b3d53053c2404b67c74d31daf17d4601db62927b6dc4fd4bbfb20dce/livekit_plugins_turn_detector-1.5.7-py3-none-any.whl", hash = "sha256:53c7e1b793f498694de3d5a83de26006818f8be3f9ea5871302797c74a31bfca", size = 10332, upload-time = "2026-04-30T20:40:42.884Z" },
+]
+
+[[package]]
+name = "livekit-plugins-volcengine"
+version = "1.2.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents" },
+    { name = "numpy" },
+    { name = "openai" },
+    { name = "osc-data" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/c9/fa4d3daa76fe1e4dc43fdb718afe6a5c21f2eb955ff1d65ce905717ff024/livekit_plugins_volcengine-1.2.9.tar.gz", hash = "sha256:b65c59f4e87d39b1c27a5e20f1a7e53a39d295202fc9659205fe8addb9c9a78c", size = 27065, upload-time = "2025-09-17T02:59:21.713Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/e9/0c776c7acc2934292c5aa24c1c9052e0aa33672053a3cbc79fb6a7c6e72e/livekit_plugins_volcengine-1.2.9-py3-none-any.whl", hash = "sha256:2919e1a8a717f323d4bbcd77c30be54af9408fe4e09c6540a04df33c601ca68b", size = 31335, upload-time = "2025-09-17T02:59:20.309Z" },
 ]
 
 [[package]]
@@ -1431,6 +1450,32 @@ wheels = [
 ]
 
 [[package]]
+name = "osc-data"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "kaldifst" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/9e/706c2e1e75c966e6359f9797b32c64702318759d03e862479bdad4678a35/osc_data-0.2.2.tar.gz", hash = "sha256:81867dc054b92d0e42e2bedab2e0818f5adfd684bf40f8ae0ed77f162baecd02", size = 568293, upload-time = "2025-07-04T04:52:59.996Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/8a/dc7b95415ab5210635978eed87118e746c9ab15d04b81b0a4004d1a3f855/osc_data-0.2.2-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:dc2f5f92901fea1251c79980bfec2d2d27e28d8438d5aa79e3645fc7f2b68f4c", size = 1516271, upload-time = "2025-07-04T04:52:56.926Z" },
+    { url = "https://files.pythonhosted.org/packages/81/56/7fabb1caf59bb97b96910e159ae130364e770499750e07848210351264de/osc_data-0.2.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:26222e289b55184551bb161b6cbcc036477968b49f9bc0ead3078f99b6f10204", size = 1463215, upload-time = "2025-07-04T04:52:51.705Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/9c/9669b8792f210c8f7cc136c17205596e409c01e3aa9dde3773ac4097ed98/osc_data-0.2.2-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:54e9cdec9132ac481e27e3c01dd1cb3f66b1c431185dde6bcac1735d59861f34", size = 1634514, upload-time = "2025-07-04T04:52:27.317Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/3f/c3804f3b29e549f2fecf341fbf9c398111e5128ad6292a0f2ed05c2a870a/osc_data-0.2.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:228e6b413a26488b29b9828db403bd5b282a9bf88fe3f6d9c2ab33766cd0d595", size = 1645600, upload-time = "2025-07-04T04:52:40.137Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/1a/af0f4b143df9dec6084f9c87166a89a3b3a7ced054e87e74f02a2bb16250/osc_data-0.2.2-cp312-cp312-win32.whl", hash = "sha256:7f7d9159eda260ea44a47152b10ab8e215a843ef1a2ba0f553488ec7c9ae5106", size = 1266022, upload-time = "2025-07-04T04:53:09.73Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/dd/0285593c5d5672a6ab18c4f7682fade6491b271e8dd8958f0ef0abcfb908/osc_data-0.2.2-cp312-cp312-win_amd64.whl", hash = "sha256:d117e5cf9aa01e7c3ab5b1eb73fee5c8e023006a2667a78e577a9f611fbdfa44", size = 1342702, upload-time = "2025-07-04T04:53:03.579Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/0e/1fc16eb020d2c0a70eb93c260596e8c670e5e4b528a1c976db80e1748f55/osc_data-0.2.2-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:00f3587d316c666058877be3a4c89f62c7b84d1a7ce2e66790989cca23a972fd", size = 1515889, upload-time = "2025-07-04T04:52:58.465Z" },
+    { url = "https://files.pythonhosted.org/packages/29/b4/f13d6934f6410df43bb16645a5bdad7d8c48067662ba413291d4ed9e093c/osc_data-0.2.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:07326ebbe2588a4a1079077be264b220fcfcb55043cb43cc3d876ac7ad4209ce", size = 1462728, upload-time = "2025-07-04T04:52:52.904Z" },
+    { url = "https://files.pythonhosted.org/packages/80/95/1292e75eb41008aa384f32ae7452133a186f8d2a53d0d0a8064b27ba48fe/osc_data-0.2.2-cp313-cp313-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:fc2f3355550067bf869069778abb2fd28824b3271d208e7e8d914d666d9cc622", size = 1633817, upload-time = "2025-07-04T04:52:28.957Z" },
+    { url = "https://files.pythonhosted.org/packages/26/75/8e3c6637657ab0770849e012f2dc916d574cb7197e7a6184ee03269f7194/osc_data-0.2.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c09b7c1e33e0900813747b1f40bacfbf2925e2ca8e1a188837991d44d4ba4500", size = 1645610, upload-time = "2025-07-04T04:52:41.792Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/67/c7ae0b53ae3998ab1c4c99da567950cf257e2368adafbd12391768195c86/osc_data-0.2.2-cp313-cp313-win32.whl", hash = "sha256:8620cb0f4e331d209e8c49986941a52517a3e84beb1c5a1a621915006ae7fc5b", size = 1264930, upload-time = "2025-07-04T04:53:10.917Z" },
+    { url = "https://files.pythonhosted.org/packages/72/e6/9dbbad6f15f56d2bceff557bb85ee03f726a382cc5234308e4860cfcba44/osc_data-0.2.2-cp313-cp313-win_amd64.whl", hash = "sha256:9e072f5576f63101d85fb2166341da2983b25670f6c1b71916764b0bcf8166cc", size = 1342646, upload-time = "2025-07-04T04:53:04.781Z" },
+    { url = "https://files.pythonhosted.org/packages/62/ae/38a086765164ea04f20689ad13cd768a53b75cc18f23faeef1cc62af4080/osc_data-0.2.2-cp314-cp314-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:306d186c3445d422fad786e91f6a9aef20d7f4c540ad8f2d0d063b2e95f7a1eb", size = 1634582, upload-time = "2025-07-04T04:52:30.677Z" },
+    { url = "https://files.pythonhosted.org/packages/17/54/f3fe36b5498a5d9a5f4a079e1e38c02a0d74e27b9a264f080bb0218a757c/osc_data-0.2.2-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:11fed6be7b0f9b6b4ac453223e416b09110a21b72570d448a73fa120d4772a03", size = 1645727, upload-time = "2025-07-04T04:52:43.414Z" },
+]
+
+[[package]]
 name = "outbound-caller-python"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1439,12 +1484,11 @@ dependencies = [
     { name = "livekit" },
     { name = "livekit-agents" },
     { name = "livekit-api" },
-    { name = "livekit-plugins-cartesia" },
-    { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-noise-cancellation" },
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
     { name = "livekit-plugins-turn-detector" },
+    { name = "livekit-plugins-volcengine" },
     { name = "mysql-connector-python" },
     { name = "openai" },
     { name = "python-dotenv" },
@@ -1457,12 +1501,11 @@ requires-dist = [
     { name = "livekit", specifier = ">=1.1.7" },
     { name = "livekit-agents", specifier = ">=1.5.7" },
     { name = "livekit-api", specifier = ">=0.8.0" },
-    { name = "livekit-plugins-cartesia", specifier = ">=1.5.7" },
-    { name = "livekit-plugins-deepgram", specifier = ">=1.5.7" },
     { name = "livekit-plugins-noise-cancellation", specifier = ">=0.2.5" },
     { name = "livekit-plugins-openai", specifier = ">=1.5.7" },
     { name = "livekit-plugins-silero", specifier = ">=1.5.7" },
     { name = "livekit-plugins-turn-detector", specifier = ">=1.5.7" },
+    { name = "livekit-plugins-volcengine" },
     { name = "mysql-connector-python", specifier = ">=9.0" },
     { name = "openai", specifier = ">=1.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },

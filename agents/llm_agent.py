@@ -3,8 +3,8 @@
 
 架构：
   LiveKit AgentSession 管理 STT → LLM → TTS 语音管道
-  Agent 的 function_tool 处理业务操作（保存访客记录、转接、挂断）
-  系统 prompt 约束 LLM 行为（3 轮采集、何时保存、何时结束）
+  Agent 的 function_tool 处理业务操作（保存访客记录并自动挂断）
+  系统 prompt 约束 LLM 行为（3 轮采集、主动开场、何时保存）
 """
 from __future__ import annotations
 
@@ -30,12 +30,16 @@ from livekit.agents import (
     WorkerOptions,
     RoomInputOptions,
 )
-from livekit.plugins import deepgram, cartesia, silero, noise_cancellation
-from livekit.plugins.turn_detector.english import EnglishModel
+from livekit.plugins import volcengine, silero, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from livekit.plugins.openai import LLM as OpenAILLM
 
-from prompts.llm_prompy import SYSTEM_PROMPT
+from config.livekit_config import (
+    VOLCENGINE_STT_APP_ID, VOLCENGINE_STT_CLUSTER, VOLCENGINE_STT_ACCESS_TOKEN,
+    VOLCENGINE_TTS_APP_ID, VOLCENGINE_TTS_CLUSTER, VOLCENGINE_TTS_ACCESS_TOKEN,
+    VOLCENGINE_LLM_API_KEY, VOLCENGINE_LLM_MODEL, VOLCENGINE_LLM_BASE_URL,
+)
+from prompts.llm_prompy import SYSTEM_PROMPT, GREET_INSTRUCTION
 
 load_dotenv(dotenv_path=".env.local")
 logger = logging.getLogger("park-visitor-agent")
@@ -80,7 +84,7 @@ class InboundAgent(Agent):
         *,
         caller_number: str,
         return_visit_summary: str = "",
-        transfer_to: str = "",
+        greet_instruction: str = "",
     ):
         # 构建回访信息段
         if return_visit_summary:
@@ -94,6 +98,10 @@ class InboundAgent(Agent):
             return_visit_section=return_visit_section,
         )
 
+        # 追加开场白指令
+        if greet_instruction:
+            instructions += f"\n\n## 开场白指令\n{greet_instruction}"
+
         super().__init__(instructions=instructions)
 
         # 通话上下文
@@ -101,7 +109,6 @@ class InboundAgent(Agent):
         self.return_visit_summary = return_visit_summary
         self.visitor_context: dict[str, Any] = {
             "caller_number": caller_number,
-            "transfer_to": transfer_to,
             "call_room_name": "",
         }
         self.participant: rtc.RemoteParticipant | None = None
@@ -124,7 +131,7 @@ class InboundAgent(Agent):
         purpose: str,
         visitor_name: str,
     ):
-        """访客信息采集完毕后调用，保存访客登记记录。
+        """访客信息采集完毕后调用，保存访客登记记录并结束通话。
 
         Args:
             caller_number: 呼入主叫号码
@@ -165,56 +172,57 @@ class InboundAgent(Agent):
             }
             await push_visitor_to_security(record)
 
-            return f"访客记录已保存（ID: {record_id}），已通知门卫"
+            # 礼貌告别后挂断
+            await ctx.session.generate_reply(
+                instructions="告知访客记录已保存、已通知门卫放行，礼貌告别"
+            )
+            current_speech = ctx.session.current_speech
+            if current_speech:
+                await current_speech.wait_for_playout()
+            await self._hangup()
+
+            return "访客记录已保存，通话已结束"
         except Exception as e:
             logger.error(f"保存访客记录失败: {e}")
             return f"保存失败: {e}"
 
-    @function_tool()
-    async def transfer_call(self, ctx: RunContext):
-        """访客要求找人工/保安时调用，转接通话。"""
-        transfer_to = self.visitor_context.get("transfer_to")
-        if not transfer_to:
-            return "无法转接：未配置保安转接号码"
-
-        logger.info(f"转接通话至保安: {transfer_to}")
-
-        await ctx.session.generate_reply(
-            instructions="告知访客即将转接给保安，请稍候"
-        )
-
-        job_ctx = get_job_context()
-        try:
-            await job_ctx.api.sip.transfer_sip_participant(
-                api.TransferSIPParticipantRequest(
-                    room_name=job_ctx.room.name,
-                    participant_identity=self.participant.identity if self.participant else "",
-                    transfer_to=f"tel:{transfer_to}",
-                )
-            )
-            logger.info(f"转接成功: {transfer_to}")
-        except Exception as e:
-            logger.error(f"转接失败: {e}")
-            await ctx.session.generate_reply(
-                instructions="转接出现问题，请稍后再试"
-            )
-            await self.hangup()
-
-    @function_tool()
-    async def end_call(self, ctx: RunContext):
-        """访客信息已保存或通话结束时调用。"""
-        logger.info("结束通话")
-        current_speech = ctx.session.current_speech
-        if current_speech:
-            await current_speech.wait_for_playout()
-        await self.hangup()
-
-    async def hangup(self):
+    async def _hangup(self):
         """挂断通话：通过删除房间来结束呼叫。"""
         job_ctx = get_job_context()
         await job_ctx.api.room.delete_room(
             api.DeleteRoomRequest(room=job_ctx.room.name)
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 语音管道构建 — 火山引擎 STT → LLM → TTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_agent_session() -> AgentSession:
+    """构建火山引擎语音管道：STT → LLM → TTS
+
+    所有配置从 .env.local 经 config/livekit_config.py 读取。
+    """
+    return AgentSession(
+        turn_detection=MultilingualModel(),
+        vad=silero.VAD.load(),
+        stt=volcengine.STT(
+            app_id=VOLCENGINE_STT_APP_ID,
+            cluster=VOLCENGINE_STT_CLUSTER,
+        ),
+        tts=volcengine.TTS(
+            app_id=VOLCENGINE_TTS_APP_ID,
+            cluster=VOLCENGINE_TTS_CLUSTER,
+            voice="BV001_V2_streaming",
+        ),
+        llm=OpenAILLM(
+            model=VOLCENGINE_LLM_MODEL,
+            base_url=VOLCENGINE_LLM_BASE_URL,
+            api_key=VOLCENGINE_LLM_API_KEY,
+            temperature=0.7,
+        ),
+        min_endpointing_delay=1.5,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -226,6 +234,22 @@ async def inbound_entrypoint(ctx: JobContext):
 
     呼入流程：SIP trunk 自动创建 Room → Agent dispatch 加入 → 等待来电方
     """
+    # 校验火山引擎必填配置
+    missing = []
+    if not VOLCENGINE_STT_APP_ID:
+        missing.append("VOLCENGINE_STT_APP_ID")
+    if not VOLCENGINE_TTS_APP_ID:
+        missing.append("VOLCENGINE_TTS_APP_ID")
+    if not VOLCENGINE_STT_ACCESS_TOKEN:
+        missing.append("VOLCENGINE_STT_ACCESS_TOKEN")
+    if not VOLCENGINE_TTS_ACCESS_TOKEN:
+        missing.append("VOLCENGINE_TTS_ACCESS_TOKEN")
+    if not VOLCENGINE_LLM_API_KEY:
+        missing.append("VOLCENGINE_LLM_API_KEY")
+    if missing:
+        logger.error(f"缺少火山引擎必填配置: {', '.join(missing)}，请在 .env.local 中设置")
+        return
+
     logger.info(f"连接房间: {ctx.room.name}")
     await ctx.connect()
 
@@ -239,38 +263,30 @@ async def inbound_entrypoint(ctx: JobContext):
 
     # 查询回访信息（预注入）
     from infra.visitor_db import lookup_visitor_by_phone, format_return_visit_summary
+    return_visit_summary = ""
     try:
         previous_records = lookup_visitor_by_phone(caller_number)
         is_return_visit = len(previous_records) > 0
-        return_visit_summary = format_return_visit_summary(previous_records)
+        return_visit_summary = format_return_visit_summary(previous_records) if is_return_visit else ""
         if is_return_visit:
             logger.info(f"回访识别: {return_visit_summary}")
     except Exception as e:
         logger.warning(f"回访查询失败（继续作为新访客处理）: {e}")
         is_return_visit = False
-        return_visit_summary = ""
 
-    # 获取保安转接号码
-    import os
-    transfer_to = os.getenv("SECURITY_TRANSFER_NUMBER", "")
+    # 根据是否回访选择开场白
+    greet_instruction = GREET_INSTRUCTION
 
     # 创建 Agent 实例
     agent = InboundAgent(
         caller_number=caller_number,
         return_visit_summary=return_visit_summary,
-        transfer_to=transfer_to,
+        greet_instruction=greet_instruction,
     )
     agent.set_participant(participant, room_name=ctx.room.name)
 
-    # 配置语音管道：STT → LLM → TTS（中文场景）
-    session = AgentSession(
-        turn_detection=MultilingualModel(),
-        vad=silero.VAD.load(),
-        stt=deepgram.STT(language="zh-CN", model="nova-3"),
-        tts=cartesia.TTS(language="zh", model="sonic-3"),
-        llm=OpenAILLM(model="gpt-4o", temperature=0.7),
-        min_endpointing_delay=1.5,
-    )
+    # 配置语音管道：STT → LLM → TTS（火山引擎）
+    session = build_agent_session()
 
     # ── 管道事件监听：可视化 STT/LLM/TTS 每一步 ──────────────────────────────
     @session.on("user_input_transcribed")
