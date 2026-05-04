@@ -75,7 +75,6 @@ async def health_check():
         livekit_url=LIVEKIT_URL,
     )
 
-
 @app.post("/call", response_model=CallResponse, deprecated=True)
 async def create_call(req: CallRequest):
     """发起外呼（outbound-only，已标记废弃）

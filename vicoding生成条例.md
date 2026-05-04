@@ -30,6 +30,7 @@
 - 保留字段: `call_status`, `messages`, `turn_count`, `conversation_summary`, `error`
 - 更新 `call_status` 取值: `inbound_ringing / connected / saving / ended / transferred`
 
+   - **STT/TTS 中文方案选型**：见 6.3，需确认阿里云等方案的 LiveKit 插件适配情况
 **测试用例**:
 1. 用所有新字段实例化 `CallState`，验证 TypedDict 接受
 2. 仅用必填字段 `caller_number` 实例化，验证 Optional 字段可默认 None

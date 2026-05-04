@@ -9,7 +9,12 @@
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Any
+
+# 确保项目根目录在 sys.path 中，支持从任意目录启动
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
@@ -27,11 +32,10 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, cartesia, silero, noise_cancellation
 from livekit.plugins.turn_detector.english import EnglishModel
-from openai.types.chat import ChatCompletionToolParam
-from openai import OpenAI
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.plugins.openai import LLM as OpenAILLM
 
-from prompts.llm_prompy import SYSTEM_PROMPT, GREET_INSTRUCTION
-from config.livekit_config import SIP_OUTBOUND_TRUNK_ID
+from prompts.llm_prompy import SYSTEM_PROMPT
 
 load_dotenv(dotenv_path=".env.local")
 logger = logging.getLogger("park-visitor-agent")
@@ -258,14 +262,33 @@ async def inbound_entrypoint(ctx: JobContext):
     )
     agent.set_participant(participant, room_name=ctx.room.name)
 
-    # 配置语音管道：STT → LLM → TTS
+    # 配置语音管道：STT → LLM → TTS（中文场景）
     session = AgentSession(
-        turn_detection=EnglishModel(),
+        turn_detection=MultilingualModel(),
         vad=silero.VAD.load(),
-        stt=deepgram.STT(),
-        tts=cartesia.TTS(),
-        llm=OpenAI(model="gpt-4o", temperature=0.7),
+        stt=deepgram.STT(language="zh-CN", model="nova-3"),
+        tts=cartesia.TTS(language="zh", model="sonic-3"),
+        llm=OpenAILLM(model="gpt-4o", temperature=0.7),
+        min_endpointing_delay=1.5,
     )
+
+    # ── 管道事件监听：可视化 STT/LLM/TTS 每一步 ──────────────────────────────
+    @session.on("user_input_transcribed")
+    def _on_stt(ev):
+        logger.info(f"[STT] 识别结果: {ev.transcript} (final={ev.is_final})")
+
+    @session.on("response_started")
+    def _on_llm_start(ev):
+        logger.info("[LLM] 开始生成回复...")
+
+    @session.on("response_done")
+    def _on_llm_done(ev):
+        text = ev.output.transcript if hasattr(ev, 'output') and hasattr(ev.output, 'transcript') else str(ev)
+        logger.info(f"[LLM] 回复完成: {text}")
+
+    @session.on("speech_created")
+    def _on_tts(ev):
+        logger.info(f"[TTS] 开始语音合成...")
 
     # 启动会话（无 SIP 拨号 — 来电方已在房间中）
     await session.start(

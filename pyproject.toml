@@ -11,4 +11,12 @@ dependencies = [
     "uvicorn[standard]>=0.46.0",
     "mysql-connector-python>=9.0",
     "openai>=1.0",
+    "livekit-agents>=1.5.7",
+    "livekit-plugins-deepgram>=1.5.7",
+    "livekit-plugins-cartesia>=1.5.7",
+    "livekit-plugins-silero>=1.5.7",
+    "livekit-plugins-noise-cancellation>=0.2.5",
+    "livekit-plugins-turn-detector>=1.5.7",
+    "python-dotenv>=1.2.2",
+    "livekit-plugins-openai>=1.5.7",
 ]
