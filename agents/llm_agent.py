@@ -76,7 +76,7 @@ class InboundAgent(Agent):
     """工业园区访客呼入登记 Agent
 
     纯 LiveKit AgentSession 驱动，无 LangGraph。
-    系统提示词约束 LLM 在 3 轮内采集访客信息并保存。
+    两个 function_tool：update_visitor_info（实时提取字段）+ confirm_and_save（校验落库挂断）。
     """
 
     def __init__(
@@ -113,6 +113,9 @@ class InboundAgent(Agent):
         }
         self.participant: rtc.RemoteParticipant | None = None
 
+        # 实时采集状态
+        self.collected: dict[str, str] = {}
+
     def set_participant(self, participant: rtc.RemoteParticipant, room_name: str = ""):
         """设置远端参与者和房间名"""
         self.participant = participant
@@ -121,56 +124,99 @@ class InboundAgent(Agent):
     # ── LiveKit function_tools ─────────────────────────────────────────────
 
     @function_tool()
-    async def save_visitor_record(
+    async def update_visitor_info(
         self,
         ctx: RunContext,
-        caller_number: str,
-        license_plate: str,
-        visiting_company: str,
-        visitor_phone: str,
-        purpose: str,
-        visitor_name: str,
+        license_plate: str = "",
+        visiting_company: str = "",
+        visitor_phone: str = "",
+        purpose: str = "",
+        visitor_name: str = "",
     ):
-        """访客信息采集完毕后调用，保存访客登记记录并结束通话。
+        """从访客话语中提取到一个或多个字段时调用，记录到当前采集状态。
 
         Args:
-            caller_number: 呼入主叫号码
-            license_plate: 车牌号
-            visiting_company: 来访单位
-            visitor_phone: 访客联系电话
-            purpose: 来访事由
-            visitor_name: 访客姓名
+            license_plate: 车牌号（可选）
+            visiting_company: 来访单位（可选）
+            visitor_phone: 访客联系电话（可选）
+            purpose: 来访事由（可选）
+            visitor_name: 访客姓名（可选）
         """
+        # 合并新提取的字段（空值不覆盖已有值）
+        fields = {
+            "license_plate": license_plate,
+            "visiting_company": visiting_company,
+            "visitor_phone": visitor_phone,
+            "purpose": purpose,
+            "visitor_name": visitor_name,
+        }
+        for key, val in fields.items():
+            if val:
+                self.collected[key] = val
+
+        logger.info(f"更新采集状态: {self.collected}")
+
+        # 构建返回摘要
+        collected_items = [f"{k}={v}" for k, v in self.collected.items() if v]
+        missing = []
+        if not self.collected.get("purpose"):
+            missing.append("来访事由")
+        if not self.collected.get("visiting_company") and not self.collected.get("visitor_name"):
+            missing.append("来访单位或访客姓名")
+
+        result_parts = [f"已记录: {', '.join(collected_items)}"]
+        if missing:
+            result_parts.append(f"待采集: {', '.join(missing)}")
+            result_parts.append("请追问缺失字段")
+        else:
+            result_parts.append("必填字段已齐，可以调用 confirm_and_save 保存")
+
+        return "；".join(result_parts)
+
+    @function_tool()
+    async def confirm_and_save(self, ctx: RunContext):
+        """必填字段采集完毕后调用，保存访客记录、推送通知并结束通话。
+
+        内部校验：必填字段不齐则拒绝保存并返回缺失字段。
+        """
+        # 校验必填字段
+        missing = []
+        if not self.collected.get("purpose"):
+            missing.append("来访事由")
+        if not self.collected.get("visiting_company") and not self.collected.get("visitor_name"):
+            missing.append("来访单位或访客姓名")
+
+        if missing:
+            logger.warning(f"必填字段缺失，拒绝保存: {missing}")
+            return f"必填字段未齐，缺少: {', '.join(missing)}，请继续采集"
+
         from infra.visitor_db import save_visitor_record as db_save
         from infra.wechat_push import push_visitor_to_security
 
-        logger.info(
-            f"保存访客记录: caller={caller_number}, plate={license_plate}, "
-            f"company={visiting_company}, purpose={purpose}"
-        )
+        record_data = {
+            "caller_number": self.caller_number,
+            "license_plate": self.collected.get("license_plate", ""),
+            "visiting_company": self.collected.get("visiting_company", ""),
+            "visitor_phone": self.collected.get("visitor_phone", ""),
+            "purpose": self.collected.get("purpose", ""),
+            "visitor_name": self.collected.get("visitor_name", ""),
+        }
+
+        logger.info(f"保存访客记录: {record_data}")
 
         try:
             record_id = db_save(
-                caller_number=caller_number,
-                license_plate=license_plate or None,
-                visiting_company=visiting_company or None,
-                visitor_phone=visitor_phone or None,
-                purpose=purpose or None,
-                visitor_name=visitor_name or None,
+                caller_number=record_data["caller_number"],
+                license_plate=record_data["license_plate"] or None,
+                visiting_company=record_data["visiting_company"] or None,
+                visitor_phone=record_data["visitor_phone"] or None,
+                purpose=record_data["purpose"] or None,
+                visitor_name=record_data["visitor_name"] or None,
                 call_room_name=self.visitor_context.get("call_room_name", ""),
             )
             logger.info(f"访客记录已保存, id={record_id}")
 
-            # 推送微信通知（占位）
-            record = {
-                "caller_number": caller_number,
-                "license_plate": license_plate,
-                "visiting_company": visiting_company,
-                "visitor_phone": visitor_phone,
-                "purpose": purpose,
-                "visitor_name": visitor_name,
-            }
-            await push_visitor_to_security(record)
+            await push_visitor_to_security(record_data)
 
             # 礼貌告别后挂断
             await ctx.session.generate_reply(
