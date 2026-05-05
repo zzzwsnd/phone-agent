@@ -7,6 +7,8 @@ Agent 构造时通过 tools= 参数传入。
 from __future__ import annotations
 
 import logging
+from typing import Optional
+
 from livekit import api
 from livekit.agents import (
     function_tool,
@@ -37,20 +39,20 @@ def create_voice_tools(state: CallState):
     @function_tool()
     async def update_visitor_info(
         ctx: RunContext,
-        license_plate: str = "",
-        visiting_company: str = "",
-        purpose: str = "",
-        visitor_name: str = "",
+        license_plate: Optional[str] = None,
+        visiting_company: Optional[str] = None,
+        purpose: Optional[str] = None,
+        visitor_name: Optional[str] = None,
     ):
-        """从访客话语中提取到一个或多个字段时调用，记录到当前采集状态。
+        """从访客话语中提取到一个或多个字段时调用，记录到当前采集状态。所有参数均为字符串类型，不知道的参数不要传。
 
         Args:
-            license_plate: 车牌号（可选）
-            visiting_company: 来访单位（可选）
-            purpose: 来访事由（可选）
-            visitor_name: 访客姓名（可选）
+            license_plate: 车牌号，字符串类型（可选）
+            visiting_company: 来访单位，字符串类型（可选）
+            purpose: 来访事由，字符串类型（可选）
+            visitor_name: 访客姓名，字符串类型（可选）
         """
-        # 合并新提取的字段（空值不覆盖已有值）
+        # 合并新提取的字段（None 和空值不覆盖已有值）
         fields = {
             "license_plate": license_plate,
             "visiting_company": visiting_company,
@@ -58,13 +60,13 @@ def create_voice_tools(state: CallState):
             "visitor_name": visitor_name,
         }
         for key, val in fields.items():
-            if val:
-                state[key] = val
+            if val and str(val).strip():
+                state[key] = str(val).strip()
 
         logger.info(f"更新采集状态: {dict((k, v) for k, v in state.items() if v and k in ('license_plate', 'visiting_company', 'purpose', 'visitor_name'))}")
 
         # 构建返回摘要
-        collected_items = [f"{k}={v}" for k, v in fields.items() if state.get(k)]
+        collected_items = [f"{k}={state[k]}" for k in ('license_plate', 'visiting_company', 'purpose', 'visitor_name') if state.get(k)]
         missing = []
         if not state.get("purpose"):
             missing.append("来访事由")
@@ -81,10 +83,14 @@ def create_voice_tools(state: CallState):
         return "；".join(result_parts)
 
     @function_tool()
-    async def save_visitor_record(ctx: RunContext):
-        """访客信息采集完毕后调用，保存访客记录、推送通知并结束通话。
+    async def save_visitor_record(
+        ctx: RunContext,
+        reason: Optional[str] = None,
+    ):
+        """访客信息采集完毕后调用，保存访客记录、推送通知并结束通话。不需要传任何参数。
 
-        不做必填校验，直接保存当前已采集的字段。保存后自动挂断。
+        Args:
+            reason: 保存原因备注，字符串类型（可选，不需要传）
         """
         from infra.visitor_db import save_visitor_record as db_save
         from infra.wechat_push import push_visitor_to_security
@@ -133,10 +139,14 @@ def create_voice_tools(state: CallState):
             return f"保存失败: {e}"
 
     @function_tool()
-    async def end_call(ctx: RunContext):
-        """结束通话。适用于：访客辱骂/恶意骚扰、信息不齐超时、或其他需要结束通话的场景。
+    async def end_call(
+        ctx: RunContext,
+        reason: Optional[str] = None,
+    ):
+        """结束通话。不需要传任何参数。适用于：访客辱骂/恶意骚扰、信息不齐超时、或其他需要结束通话的场景。
 
-        辱骂场景：礼貌告别后挂断，不要对骂或纠缠。
+        Args:
+            reason: 结束原因备注，字符串类型（可选，不需要传）
         """
         logger.info("结束通话")
         current_speech = ctx.session.current_speech

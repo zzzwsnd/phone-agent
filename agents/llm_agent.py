@@ -172,22 +172,6 @@ async def inbound_entrypoint(ctx: JobContext):
     caller_number = extract_caller_number(participant)
     logger.info(f"主叫号码: {caller_number}")
 
-    # 查询回访信息（预注入）
-    from infra.visitor_db import lookup_visitor_by_phone, format_return_visit_summary
-    return_visit_summary = ""
-    try:
-        previous_records = lookup_visitor_by_phone(caller_number)
-        is_return_visit = len(previous_records) > 0
-        return_visit_summary = format_return_visit_summary(previous_records) if is_return_visit else ""
-        if is_return_visit:
-            logger.info(f"回访识别: {return_visit_summary}")
-    except Exception as e:
-        logger.warning(f"回访查询失败（继续作为新访客处理）: {e}")
-        is_return_visit = False
-
-    # 根据是否回访选择开场白
-    greet_instruction = GREET_INSTRUCTION
-
     # 创建通话状态
     state: CallState = {
         "caller_number": caller_number,
@@ -196,6 +180,35 @@ async def inbound_entrypoint(ctx: JobContext):
         "return_visit_summary": return_visit_summary,
         "call_status": "connected",
     }
+    # 查询回访信息（预注入）
+    from infra.visitor_db import lookup_visitor_by_phone, format_return_visit_summary
+    return_visit_summary = ""
+    try:
+        previous_records = lookup_visitor_by_phone(caller_number)
+        is_return_visit = len(previous_records) > 0
+        return_visit_summary = format_return_visit_summary(previous_records) if is_return_visit else ""
+        if is_return_visit:
+            state["is_return_visit"] = is_return_visit
+            state["return_visit_summary"] = return_visit_summary
+            # 预填最近一次记录的字段，便于回访确认后直接保存
+            latest = previous_records[0]
+            if latest.get("license_plate"):
+                state["license_plate"] = latest["license_plate"]
+            if latest.get("visiting_company"):
+                state["visiting_company"] = latest["visiting_company"]
+            if latest.get("purpose"):
+                state["purpose"] = latest["purpose"]
+            if latest.get("visitor_name"):
+                state["visitor_name"] = latest["visitor_name"]
+            logger.info(f"回访识别: {return_visit_summary}")
+    except Exception as e:
+        logger.warning(f"回访查询失败（继续作为新访客处理）: {e}")
+        is_return_visit = False
+
+    # 根据是否回访选择开场白
+    greet_instruction = GREET_INSTRUCTION
+
+
 
     # 创建工具（绑定到 CallState）
     tools = create_voice_tools(state)
