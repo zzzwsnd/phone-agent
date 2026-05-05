@@ -176,8 +176,6 @@ async def inbound_entrypoint(ctx: JobContext):
     state: CallState = {
         "caller_number": caller_number,
         "call_room_name": ctx.room.name,
-        "is_return_visit": is_return_visit,
-        "return_visit_summary": return_visit_summary,
         "call_status": "connected",
     }
     # 查询回访信息（预注入）

@@ -11,16 +11,9 @@ LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
-# ── SIP 配置 ────────────────────────────────────────────────────────────────
-# SIP_OUTBOUND_TRUNK_ID = os.getenv("SIP_OUTBOUND_TRUNK_ID", "")
-# SIP_INBOUND_TRUNK_ID = os.getenv("SIP_INBOUND_TRUNK_ID", "")
-
 # ── Agent 名称（调度匹配用） ─────────────────────────────────────────────────
 AGENT_NAME = os.getenv("AGENT_NAME", "outbound-caller")
 # INBOUND_AGENT_NAME = os.getenv("INBOUND_AGENT_NAME", "park-visitor-agent")
-
-# ── 安全相关配置 ──────────────────────────────────────────────────────────────
-# SECURITY_TRANSFER_NUMBER = os.getenv("SECURITY_TRANSFER_NUMBER", "")
 
 # ── 火山引擎 STT ────────────────────────────────────────────────────────────
 VOLCENGINE_STT_APP_ID = os.getenv("VOLCENGINE_STT_APP_ID", "")
