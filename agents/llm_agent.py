@@ -3,18 +3,77 @@
 
 架构：
   LiveKit AgentSession 管理 STT → LLM → TTS 语音管道
-  工厂模式 function_tool（voice_tool.py）处理业务操作
   系统 prompt 约束 LLM 行为（3 轮采集、主动开场、何时保存）
 """
 from __future__ import annotations
-
+from config.agent_config import build_agent_session
+import asyncio
+import json
 import logging
+import re
 import sys
 from pathlib import Path
 # 确保项目根目录在 sys.path 中，支持从任意目录启动
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
+
+# ── Monkey-patch: 修复 GLM-5.1 tool call 参数中未加引号的字符串值 ──────────────
+# GLM-5.1 有时输出 {"license_plate": A12345} 而非 {"license_plate": "A12345"}，
+# 导致 pydantic_core.from_json 严格解析失败。此 patch 在解析失败时尝试正则修复。
+import livekit.agents.llm.utils as _llm_utils
+_original_prepare = _llm_utils.prepare_function_arguments
+
+_UNQUOTED_VALUE_RE = re.compile(
+    r'(?<=[,\{\[:\s])\s*([A-Za-z_\u4e00-\u9fff][\w\u4e00-\u9fff]*)\s*(?=[,\}\]\s:])'
+)
+
+def _fix_unquoted_json(raw: str) -> str:
+    """将 JSON 中未加引号的字符串值用双引号包裹。"""
+    # 反复修复直到没有变化或解析成功
+    for _ in range(3):
+        fixed = _UNQUOTED_VALUE_RE.sub(r' "\1"', raw)
+        if fixed == raw:
+            break
+        try:
+            json.loads(fixed)
+            return fixed
+        except json.JSONDecodeError:
+            raw = fixed
+            continue
+    return fixed
+
+def _patched_prepare_function_arguments(*, fnc, json_arguments, call_ctx=None):
+    if isinstance(json_arguments, str):
+        # 1) 截断/空 JSON 兜底：只有 { 或空字符串时用 {} 代替
+        stripped = json_arguments.strip()
+        if not stripped or stripped == "{" or stripped == "}":
+            logger.warning(f"修复截断 tool call JSON: {json_arguments!r} → {{}}")
+            return _original_prepare(fnc=fnc, json_arguments="{}", call_ctx=call_ctx)
+
+        try:
+            return _original_prepare(fnc=fnc, json_arguments=json_arguments, call_ctx=call_ctx)
+        except (ValueError, Exception):
+            # 2) 尝试修复未加引号的字符串值
+            fixed = _fix_unquoted_json(json_arguments)
+            if fixed != json_arguments:
+                logger.warning(f"修复 tool call JSON: {json_arguments!r} → {fixed!r}")
+                try:
+                    return _original_prepare(fnc=fnc, json_arguments=fixed, call_ctx=call_ctx)
+                except Exception:
+                    pass
+            # 3) 仍失败，尝试补全截断的 JSON 再解析
+            for attempt in [json_arguments + "}", json_arguments.rstrip(",") + "}"]:
+                try:
+                    return _original_prepare(fnc=fnc, json_arguments=attempt, call_ctx=call_ctx)
+                except Exception:
+                    continue
+            logger.error(f"无法修复 tool call JSON: {json_arguments!r}")
+            raise
+    return _original_prepare(fnc=fnc, json_arguments=json_arguments, call_ctx=call_ctx)
+
+_llm_utils.prepare_function_arguments = _patched_prepare_function_arguments
+# ── Monkey-patch 结束 ──────────────────────────────────────────────────────────
 
 from livekit import rtc, api
 from livekit.agents import (
@@ -104,39 +163,6 @@ class InboundAgent(Agent):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 语音管道构建 — 火山引擎 STT → LLM → TTS
-# ══════════════════════════════════════════════════════════════════════════════
-
-def build_agent_session() -> AgentSession:
-    """构建火山引擎语音管道：STT → LLM → TTS
-
-    所有配置从 .env.local 经 config/livekit_config.py 读取。
-    """
-    return AgentSession(
-        turn_detection=MultilingualModel(),
-        vad=silero.VAD.load(),
-        stt=volcengine.STT(
-            app_id=VOLCENGINE_STT_APP_ID,
-            cluster=VOLCENGINE_STT_CLUSTER,
-            access_token=VOLCENGINE_STT_ACCESS_TOKEN,
-        ),
-        tts=volcengine.TTS(
-            app_id=VOLCENGINE_TTS_APP_ID,
-            cluster=VOLCENGINE_TTS_CLUSTER,
-            access_token=VOLCENGINE_TTS_ACCESS_TOKEN,
-            voice="BV001_V2_streaming",
-        ),
-        llm=OpenAILLM(
-            model=VOLCENGINE_LLM_MODEL,
-            base_url=VOLCENGINE_LLM_BASE_URL,
-            api_key=VOLCENGINE_LLM_API_KEY,
-            temperature=0.7,
-        ),
-        min_endpointing_delay=1.5,
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 入口函数 — 呼入模式
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -206,8 +232,6 @@ async def inbound_entrypoint(ctx: JobContext):
     # 根据是否回访选择开场白
     greet_instruction = GREET_INSTRUCTION
 
-
-
     # 创建工具（绑定到 CallState）
     tools = create_voice_tools(state)
 
@@ -251,4 +275,35 @@ async def inbound_entrypoint(ctx: JobContext):
         ),
     )
 
-    # LLM 根据 prompt 自行开场，不硬编码问候语
+    # 强制添加开场白，避免 LLM 硬编码开场白
+    if is_return_visit:
+        # 回访：根据回访摘要确认访客
+        company = state.get("visiting_company", "")
+        purpose = state.get("purpose", "")
+        name = state.get("visitor_name", "")
+        plate = state.get("license_plate", "")
+
+        parts = []
+        if name:
+            parts.append(f"{name}您好")
+        else:
+            parts.append("您好")
+        if company or purpose:
+            detail = f"来{company}" if company else ""
+            detail += f"送{purpose}" if purpose and not detail else (purpose if purpose and not detail else "")
+            if detail:
+                parts.append(f"今天是不是和上次一样{detail}？")
+            else:
+                parts.append("今天还是和上次一样吗？")
+        else:
+            parts.append("今天还是和上次一样吗？")
+
+        greet_text = "，".join(parts) if len(parts) > 1 else parts[0]
+        if not greet_text.endswith("？"):
+            greet_text += "？"
+    else:
+        # 新访客：简洁提问
+        greet_text = "您好，请问车牌号多少，今天找哪家公司，什么事儿？"
+
+    #await session.generate_reply(instructions=greet_text)
+    await session.say(greet_text)

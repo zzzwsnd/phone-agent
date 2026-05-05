@@ -41,7 +41,9 @@
       "Bash(D:/outbound-caller-python/venv/Scripts/python.exe --version)",
       "Bash(D:/outbound-caller-python/venv/Scripts/python.exe:*)",
       "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe install:*)",
-      "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe show:*)"
+      "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe show:*)",
+      "Bash(./venv/Scripts/python.exe -c \"print\\('hello'\\)\")",
+      "Bash(./venv/Scripts/python.exe -c ':*)"
     ]
   }
 }
