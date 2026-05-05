@@ -1,25 +1,25 @@
 """
 语音工具集 — LiveKit 通话控制操作
 
-这些是 LiveKit Agent 的 function_tool，由 AI 在对话中直接调用
-控制挂断、转接、访客记录保存等操作
+工厂模式：create_voice_tools(state) 返回绑定到当前 CallState 的 function_tool 列表。
+Agent 构造时通过 tools= 参数传入。
 """
 from __future__ import annotations
 
 import logging
-from typing import Any
-
-from livekit import rtc, api
+from livekit import api
 from livekit.agents import (
     function_tool,
     RunContext,
     get_job_context,
 )
 
+from state.python_state import CallState
+
 logger = logging.getLogger("park-visitor.voice_tools")
 
 
-async def hangup():
+async def _hangup():
     """挂断通话：通过删除房间来结束呼叫。"""
     job_ctx = get_job_context()
     await job_ctx.api.room.delete_room(
@@ -27,104 +27,121 @@ async def hangup():
     )
 
 
-def create_voice_tools(visitor_context: dict[str, Any], participant: rtc.RemoteParticipant | None):
-    """创建绑定到当前通话上下文的语音工具函数。
+def create_voice_tools(state: CallState):
+    """创建绑定到当前通话状态的语音工具函数。
 
     Args:
-        visitor_context: 访客上下文，含 caller_number, transfer_to, call_room_name
-        participant: 来电方的 RemoteParticipant
+        state: 通话状态实例，存储访客采集字段和上下文信息
     """
 
     @function_tool()
-    async def save_visitor_record(
+    async def update_visitor_info(
         ctx: RunContext,
-        caller_number: str,
-        license_plate: str,
-        visiting_company: str,
-        visitor_phone: str,
-        purpose: str,
-        visitor_name: str,
+        license_plate: str = "",
+        visiting_company: str = "",
+        purpose: str = "",
+        visitor_name: str = "",
     ):
-        """访客信息采集完毕后调用，保存访客登记记录。
+        """从访客话语中提取到一个或多个字段时调用，记录到当前采集状态。
 
         Args:
-            caller_number: 呼入主叫号码
-            license_plate: 车牌号
-            visiting_company: 来访单位
-            visitor_phone: 访客联系电话
-            purpose: 来访事由
-            visitor_name: 访客姓名
+            license_plate: 车牌号（可选）
+            visiting_company: 来访单位（可选）
+            purpose: 来访事由（可选）
+            visitor_name: 访客姓名（可选）
+        """
+        # 合并新提取的字段（空值不覆盖已有值）
+        fields = {
+            "license_plate": license_plate,
+            "visiting_company": visiting_company,
+            "purpose": purpose,
+            "visitor_name": visitor_name,
+        }
+        for key, val in fields.items():
+            if val:
+                state[key] = val
+
+        logger.info(f"更新采集状态: {dict((k, v) for k, v in state.items() if v and k in ('license_plate', 'visiting_company', 'purpose', 'visitor_name'))}")
+
+        # 构建返回摘要
+        collected_items = [f"{k}={v}" for k, v in fields.items() if state.get(k)]
+        missing = []
+        if not state.get("purpose"):
+            missing.append("来访事由")
+        if not state.get("visiting_company") and not state.get("visitor_name"):
+            missing.append("来访单位或访客姓名")
+
+        result_parts = [f"已采集: {', '.join(collected_items)}"]
+        if missing:
+            result_parts.append(f"待采集: {', '.join(missing)}")
+            result_parts.append("请立即追问待采集字段，不要调用 save_visitor_record")
+        else:
+            result_parts.append("全部必填已齐，请调用 save_visitor_record 保存")
+
+        return "；".join(result_parts)
+
+    @function_tool()
+    async def save_visitor_record(ctx: RunContext):
+        """访客信息采集完毕后调用，保存访客记录、推送通知并结束通话。
+
+        不做必填校验，直接保存当前已采集的字段。保存后自动挂断。
         """
         from infra.visitor_db import save_visitor_record as db_save
         from infra.wechat_push import push_visitor_to_security
 
-        logger.info(f"保存访客记录: caller={caller_number}, plate={license_plate}, company={visiting_company}")
+        record_data = {
+            "caller_number": state.get("caller_number", ""),
+            "license_plate": state.get("license_plate", ""),
+            "visiting_company": state.get("visiting_company", ""),
+            "visitor_phone": state.get("caller_number", ""),  # 直接用主叫号码
+            "purpose": state.get("purpose", ""),
+            "visitor_name": state.get("visitor_name", ""),
+        }
+
+        logger.info(f"保存访客记录: {record_data}")
 
         try:
             record_id = db_save(
-                caller_number=caller_number,
-                license_plate=license_plate or None,
-                visiting_company=visiting_company or None,
-                visitor_phone=visitor_phone or None,
-                purpose=purpose or None,
-                visitor_name=visitor_name or None,
-                call_room_name=visitor_context.get("call_room_name", ""),
+                caller_number=record_data["caller_number"],
+                license_plate=record_data["license_plate"] or None,
+                visiting_company=record_data["visiting_company"] or None,
+                visitor_phone=record_data["visitor_phone"] or None,
+                purpose=record_data["purpose"] or None,
+                visitor_name=record_data["visitor_name"] or None,
+                call_room_name=state.get("call_room_name", ""),
             )
             logger.info(f"访客记录已保存, id={record_id}")
 
-            # 推送微信通知（占位）
-            record = {
-                "caller_number": caller_number,
-                "license_plate": license_plate,
-                "visiting_company": visiting_company,
-                "visitor_phone": visitor_phone,
-                "purpose": purpose,
-                "visitor_name": visitor_name,
-            }
-            await push_visitor_to_security(record)
+            # 微信推送（失败不影响保存结果）
+            try:
+                await push_visitor_to_security(record_data)
+            except Exception as push_err:
+                logger.error(f"微信推送失败（记录已保存）: {push_err}")
 
-            return f"访客记录已保存（ID: {record_id}），已通知门卫"
+            # 礼貌告别后挂断
+            await ctx.session.generate_reply(
+                instructions="告知访客记录已保存、已通知门卫放行，礼貌告别"
+            )
+            current_speech = ctx.session.current_speech
+            if current_speech:
+                await current_speech.wait_for_playout()
+            await _hangup()
+
+            return "访客记录已保存，通话已结束"
         except Exception as e:
             logger.error(f"保存访客记录失败: {e}")
             return f"保存失败: {e}"
 
     @function_tool()
-    async def transfer_call(ctx: RunContext):
-        """访客要求找人工/保安时调用，转接通话。"""
-        transfer_to = visitor_context.get("transfer_to")
-        if not transfer_to:
-            return "无法转接：未配置保安转接号码"
-
-        logger.info(f"转接通话至保安: {transfer_to}")
-
-        await ctx.session.generate_reply(
-            instructions="告知访客即将转接给保安，请稍候"
-        )
-
-        job_ctx = get_job_context()
-        try:
-            await job_ctx.api.sip.transfer_sip_participant(
-                api.TransferSIPParticipantRequest(
-                    room_name=job_ctx.room.name,
-                    participant_identity=participant.identity if participant else "",
-                    transfer_to=f"tel:{transfer_to}",
-                )
-            )
-            logger.info(f"转接成功: {transfer_to}")
-        except Exception as e:
-            logger.error(f"转接失败: {e}")
-            await ctx.session.generate_reply(
-                instructions="转接出现问题，请稍后再试"
-            )
-            await hangup()
-
-    @function_tool()
     async def end_call(ctx: RunContext):
-        """访客信息已保存或通话结束时调用。"""
+        """结束通话。适用于：访客辱骂/恶意骚扰、信息不齐超时、或其他需要结束通话的场景。
+
+        辱骂场景：礼貌告别后挂断，不要对骂或纠缠。
+        """
         logger.info("结束通话")
         current_speech = ctx.session.current_speech
         if current_speech:
             await current_speech.wait_for_playout()
-        await hangup()
+        await _hangup()
 
-    return [save_visitor_record, transfer_call, end_call]
+    return [update_visitor_info, save_visitor_record, end_call]

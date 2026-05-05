@@ -18,7 +18,7 @@ class CallState(TypedDict, total=False):
     # ── 访客登记字段 ──────────────────────────────────────────────────────────
     license_plate: Optional[str]          # 车牌号，如"沪A12345"
     visiting_company: Optional[str]       # 来访单位
-    visitor_phone: Optional[str]          # 访客联系电话
+    # visitor_phone 由 caller_number 自动填充，不再单独采集
     purpose: Optional[str]                # 来访事由（送货、开会、面试等）
     visitor_name: Optional[str]           # 访客姓名
 
