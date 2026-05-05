@@ -32,7 +32,16 @@
       "Bash(findstr -i volc)",
       "Bash(dir /s /b \".venv\\\\Lib\\\\site-packages\\\\*volcengine*\")",
       "Bash(dir *volc*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"---EXIT: $?\")",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python3 -m pip show -f livekit-agents)",
+      "Bash(D:/outbound-caller-python/venv/Scripts/python.exe --version)",
+      "Bash(D:/outbound-caller-python/venv/Scripts/python.exe:*)",
+      "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe install:*)",
+      "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe show:*)"
     ]
   }
 }

@@ -15,7 +15,7 @@ source venv/Scripts/activate   # 或：powershell venv/Scripts/Activate.ps1
 pip install -r requirements.txt
 
 # 启动 API 服务（端口 8090）
-python main.py
+python cli_main.py
 
 # 启动 Agent Worker（需另开终端）
 python agents/llm_agent.py dev

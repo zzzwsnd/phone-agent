@@ -2,12 +2,14 @@
 FastAPI 服务启动入口
 
 启动方式：
-    python main.py                  # 启动 API 服务（端口 8090）
+    python cli_main.py                  # 启动 API 服务（端口 8090）
     python agents/llm_agent.py dev  # 启动 Agent Worker（另开终端）
 """
 import logging
 import uvicorn
 from api.pthon_api import app
+from livekit.agents import cli, WorkerOptions
+from agents.llm_agent import inbound_entrypoint
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,4 +31,9 @@ async def startup():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8090)
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=inbound_entrypoint,
+            agent_name="park-visitor-agent",
+        )
+    )

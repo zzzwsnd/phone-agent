@@ -353,6 +353,18 @@ async def inbound_entrypoint(ctx: JobContext):
     @session.on("speech_created")
     def _on_tts(ev):
         logger.info(f"[TTS] 开始语音合成...")
+        logger.info(ev)
+
+    @session.on("tts_audio")
+    def on_tts_audio(ev):
+        """监听TTS合成的音频流"""
+        if hasattr(ev, 'audio'):
+            # 音频数据在 ev.audio 中
+            audio_chunk = ev.audio.data
+            logger.info(f"[TTS Audio] 收到音频块: {len(audio_chunk)} bytes")
+
+            # 可以实时播放或保存
+            play_audio(audio_chunk, ev.audio.sample_rate, ev.audio.channels)
 
     # 启动会话（无 SIP 拨号 — 来电方已在房间中）
     await session.start(
@@ -365,20 +377,7 @@ async def inbound_entrypoint(ctx: JobContext):
         ),
     )
 
-    # 主动发起开场白 — 来电方在等 AI 先说话，不主动开口会导致双方沉默
-    # 使用 say() 直接 TTS，绕过 LLM 延迟（电话场景需要即时响应）
     greeting = "您好，请问车牌号多少，今天找哪家公司，什么事儿？"
     await session.say(greeting)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CLI 启动
-# ══════════════════════════════════════════════════════════════════════════════
-
-if __name__ == "__main__":
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=inbound_entrypoint,
-            agent_name="park-visitor-agent",
-        )
-    )
