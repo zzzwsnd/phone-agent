@@ -43,7 +43,8 @@
       "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe install:*)",
       "Bash(D:/outbound-caller-python/venv/Scripts/pip.exe show:*)",
       "Bash(./venv/Scripts/python.exe -c \"print\\('hello'\\)\")",
-      "Bash(./venv/Scripts/python.exe -c ':*)"
+      "Bash(./venv/Scripts/python.exe -c ':*)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

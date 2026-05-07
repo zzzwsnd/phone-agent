@@ -31,3 +31,6 @@ VOLCENGINE_TTS_ACCESS_TOKEN = os.getenv("VOLCENGINE_TTS_ACCESS_TOKEN", "")
 VOLCENGINE_LLM_API_KEY = os.getenv("VOLCENGINE_LLM_API_KEY", "")
 VOLCENGINE_LLM_MODEL = os.getenv("VOLCENGINE_LLM_MODEL", "glm-5.1")
 VOLCENGINE_LLM_BASE_URL = os.getenv("VOLCENGINE_LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+
+# ── PushPlus 微信推送 ─────────────────────────────────────────────────────────
+PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN", "")
